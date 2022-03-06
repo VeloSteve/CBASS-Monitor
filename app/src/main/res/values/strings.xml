@@ -1,0 +1,21 @@
+<resources>
+    <string name="app_name">CBASS Monitor</string>
+    <string name="devices">Bluetooth LE Devices</string>
+
+    <string name="location_permission_title">Location permission required</string>
+    <string name="location_permission_message">This app does not use location information, but scanning for Bluetooth LE devices requires this permission</string>
+
+    <string name="location_denied_title">Location permission denied</string>
+    <string name="location_denied_message">As location permission has not been granted, this app cannot scan for Bluetooth LE devices.</string>
+    <string name="pairing_request">PAIRING requested\n-> Perform pairing steps. Connect again</string>
+    <string name="terminal_help">Help</string>
+    <string name="terminal_temps">Temps</string>
+    <string name="terminal_log">T Log</string>
+    <string name="monitor_temperature">Monitor Temperature</string>
+    <string name="graph_history">Graph History</string>
+    <string name="tank_1">Tank 1</string>
+    <string name="tank_2">Tank 2</string>
+    <string name="tank_3">Tank 3</string>
+    <string name="tank_4">Tank 4</string>
+
+</resources>

@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/monitor_vert"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="horizontal">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <Button
+                android:id="@+id/buttonT1"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="@color/colorTank1"
+                android:text="@string/tank_1"
+                android:textColor="@color/design_default_color_on_secondary"
+                android:textSize="16sp" />
+
+            <CheckBox
+                android:id="@+id/checkBox1"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@color/colorTank1"
+                android:checked="true"
+                android:text="plan"
+                android:textColor="@color/design_default_color_on_secondary"
+                app:buttonTint="@color/design_default_color_on_secondary" />
+
+            <Button
+                android:id="@+id/buttonT2"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="@color/colorTank2"
+                android:text="@string/tank_2"
+                android:textColor="@color/design_default_color_on_secondary"
+                android:textSize="16sp" />
+
+            <CheckBox
+                android:id="@+id/checkBox2"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@color/colorTank2"
+                android:checked="true"
+                android:text="plan"
+                android:textColor="@color/design_default_color_on_secondary"
+                app:buttonTint="@color/design_default_color_on_secondary" />
+
+            <Button
+                android:id="@+id/buttonT3"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="@color/colorTank3"
+                android:text="@string/tank_3"
+                android:textColor="@color/design_default_color_on_secondary"
+                android:textSize="16sp" />
+
+            <CheckBox
+                android:id="@+id/checkBox3"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@color/colorTank3"
+                android:checked="true"
+                android:text="plan"
+                android:textColor="@color/design_default_color_on_secondary"
+                app:buttonTint="@color/design_default_color_on_secondary" />
+
+            <Button
+                android:id="@+id/buttonT4"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="@color/colorTank4"
+                android:text="@string/tank_4"
+                android:textColor="@color/design_default_color_on_secondary"
+
+                android:textSize="16sp" />
+
+            <CheckBox
+                android:id="@+id/checkBox4"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@color/colorTank4"
+                android:checked="true"
+                android:text="plan"
+                android:textColor="@color/design_default_color_on_secondary"
+                app:buttonTint="@color/design_default_color_on_secondary" />
+
+            <Button
+                android:id="@+id/update_btn"
+                style="?android:attr/buttonBarButtonStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Update" />
+
+            <Button
+                android:id="@+id/repeat_btn"
+                style="?android:attr/buttonBarButtonStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Follow" />
+        </LinearLayout>
+
+
+    <com.jjoe64.graphview.GraphView
+        android:id="@+id/graph"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+
+</LinearLayout>
+
