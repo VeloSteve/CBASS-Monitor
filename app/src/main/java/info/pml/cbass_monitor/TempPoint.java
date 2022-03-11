@@ -5,7 +5,7 @@ package info.pml.cbass_monitor;
  * milliseconds since start, measured temperatures, and target temperatures.
  */
 public class TempPoint implements Comparable<TempPoint> {
-    long millis = 0;
+    long millis;
     final byte nTemps = 4;
     float[] measured = new float[nTemps];
     float[] target = new float[nTemps];
@@ -15,7 +15,7 @@ public class TempPoint implements Comparable<TempPoint> {
         millis = m;
     }
     public TempPoint(String m) {
-        millis = new Long(m);
+        millis = Long.parseLong(m);
     }
 
     public TempPoint(long m, float m0, float m1, float m2, float m3,
@@ -41,19 +41,17 @@ public class TempPoint implements Comparable<TempPoint> {
 
     @Override
     public int compareTo(TempPoint other) {
-        if (other.millis > this.millis) return -1;
-        else if (other.millis < this.millis) return 1;
-        else return 0;
+        return Long.compare(this.millis, other.millis);
     }
 
     public void setMeasured(String [] parts) {
         for (int i = 0; i< nTemps; i++) {
-            measured[i] = new Float(parts[i]);
+            measured[i] = Float.parseFloat(parts[i]);
         }
     }
     public void setTarget(String [] parts) {
         for (int i = 0; i< nTemps; i++) {
-            target[i] = new Float(parts[i]);
+            target[i] = Float.parseFloat(parts[i]);
         }
     }
 

@@ -1,9 +1,5 @@
 package info.pml.cbass_monitor;
 
-import android.os.Build;
-
-import androidx.annotation.RequiresApi;
-
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.Iterator;

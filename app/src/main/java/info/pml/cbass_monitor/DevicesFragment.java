@@ -19,6 +19,8 @@ import android.os.Looper;
 import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.ListFragment;
+
+import android.util.Log;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
@@ -27,18 +29,16 @@ import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import java.util.ArrayList;
-import java.util.Collections;
 
-import info.pml.cbass_monitor.R;
 
 /**
  * show list of BLE devices
  */
 public class DevicesFragment extends ListFragment {
 
+    private final String TAG = "DevicesFragment";
     private enum ScanState { NONE, LE_SCAN, DISCOVERY, DISCOVERY_FINISHED }
     private ScanState scanState = ScanState.NONE;
     private static final long LE_SCAN_PERIOD = 10000; // similar to bluetoothAdapter.startDiscovery
@@ -59,6 +59,7 @@ public class DevicesFragment extends ListFragment {
             }
         };
         discoveryBroadcastReceiver = new BroadcastReceiver() {
+            @SuppressLint("MissingPermission")
             @Override
             public void onReceive(Context context, Intent intent) {
                 if(BluetoothDevice.ACTION_FOUND.equals(intent.getAction())) {
@@ -85,6 +86,7 @@ public class DevicesFragment extends ListFragment {
         if(getActivity().getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH))
             bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
         listAdapter = new ArrayAdapter<BluetoothDevice>(getActivity(), 0, listItems) {
+            @SuppressLint("MissingPermission")
             @NonNull
             @Override
             public View getView(int position, View view, @NonNull ViewGroup parent) {
@@ -141,6 +143,7 @@ public class DevicesFragment extends ListFragment {
     @Override
     public void onResume() {
         super.onResume();
+        Log.d(TAG, "registering receiver");
         getActivity().registerReceiver(discoveryBroadcastReceiver, discoveryIntentFilter);
         if(bluetoothAdapter == null) {
             setEmptyText("<bluetooth LE not supported>");
@@ -152,7 +155,7 @@ public class DevicesFragment extends ListFragment {
                 menu.findItem(R.id.ble_scan).setEnabled(false);
             }
         } else {
-            setEmptyText("<use SCAN to refresh devices>");
+            setEmptyText("<Use SCAN to refresh devices>");
             if (menu != null)
                 menu.findItem(R.id.ble_scan).setEnabled(true);
         }
@@ -162,6 +165,7 @@ public class DevicesFragment extends ListFragment {
     public void onPause() {
         super.onPause();
         stopScan();
+        Log.d(TAG, "UNregistering receiver");
         getActivity().unregisterReceiver(discoveryBroadcastReceiver);
     }
 
@@ -307,7 +311,7 @@ public class DevicesFragment extends ListFragment {
         args.putString("device", device.getAddress());
         Fragment fragment = new GraphFragment();
         fragment.setArguments(args);
-        getFragmentManager().beginTransaction().replace(R.id.fragment, fragment, "graph").addToBackStack(null).commit();
+        getParentFragmentManager().beginTransaction().replace(R.id.fragment, fragment, "graph").addToBackStack(null).commit();
     }
 
     /**

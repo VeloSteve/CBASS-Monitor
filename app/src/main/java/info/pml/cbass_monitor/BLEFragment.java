@@ -1,5 +1,6 @@
 package info.pml.cbass_monitor;
 
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
@@ -45,9 +46,11 @@ import de.kai_morich.simple_bluetooth_le_terminal.TextUtil;
  */
 public class BLEFragment extends Fragment implements ServiceConnection, SerialListener {
 
-    private String TAG = "BLEFragment";
-    enum Connected { False, Pending, True }
+    private final String TAG = "BLEFragment";
 
+    enum Connected {False, Pending, True}
+
+    Menu menu;
     private String deviceAddress;
     private String deviceName;
     private SerialService service;
@@ -59,12 +62,11 @@ public class BLEFragment extends Fragment implements ServiceConnection, SerialLi
     private boolean initialStart = true;
     private final String newline = TextUtil.newline_crlf;
 
-    private String msgBuffer = "";
-
     enum ExpectBLEData {
         Nothing,
         Batch
     }
+
     ExpectBLEData expectBLE = ExpectBLEData.Nothing;
 
     Timer connCheckTimer; // For noticing when the connection is dropped.
@@ -78,7 +80,7 @@ public class BLEFragment extends Fragment implements ServiceConnection, SerialLi
         setHasOptionsMenu(true);
         setRetainInstance(true);
         // TODO: exit if deviceAddress is null?
-        // Maybe getActivity().getFragmentManager().beginTransaction().remove(this).commit();
+        // Maybe getActivity().getParentFragmentManager().beginTransaction().remove(this).commit();
         deviceAddress = getArguments().getString("device");
     }
 
@@ -100,7 +102,7 @@ public class BLEFragment extends Fragment implements ServiceConnection, SerialLi
     @Override
     public void onStart() {
         super.onStart();
-        if(service != null)
+        if (service != null)
             service.attach(this);
         else
             getActivity().startService(new Intent(getActivity(), SerialService.class)); // prevents service destroy on unbind from recreated activity caused by orientation change
@@ -108,12 +110,13 @@ public class BLEFragment extends Fragment implements ServiceConnection, SerialLi
 
     @Override
     public void onStop() {
-        if(service != null && !getActivity().isChangingConfigurations())
+        if (service != null && !getActivity().isChangingConfigurations())
             service.detach();
         super.onStop();
     }
 
-    @SuppressWarnings("deprecation") // onAttach(context) was added with API 23. onAttach(activity) works for all API versions
+    @SuppressWarnings("deprecation")
+    // onAttach(context) was added with API 23. onAttach(activity) works for all API versions
     @Override
     public void onAttach(@NonNull Activity activity) {
         super.onAttach(activity);
@@ -124,14 +127,17 @@ public class BLEFragment extends Fragment implements ServiceConnection, SerialLi
     @Override
     public void onDetach() {
         Log.d(TAG, "UNBinding in onDetach.");
-        try { getActivity().unbindService(this); } catch(Exception ignored) {}
+        try {
+            getActivity().unbindService(this);
+        } catch (Exception ignored) {
+        }
         super.onDetach();
     }
 
     @Override
     public void onResume() {
         super.onResume();
-        if(initialStart && service != null) {
+        if (initialStart && service != null) {
             initialStart = false;
             getActivity().runOnUiThread(this::connect);
         }
@@ -146,7 +152,7 @@ public class BLEFragment extends Fragment implements ServiceConnection, SerialLi
         Log.d(TAG, "Getting service from binder in onServiceConnected.");
         service = ((SerialService.SerialBinder) binder).getService();
         service.attach(this);
-        if(initialStart && isResumed()) {
+        if (initialStart && isResumed()) {
             initialStart = false;
             getActivity().runOnUiThread(this::connect);
         }
@@ -174,7 +180,8 @@ public class BLEFragment extends Fragment implements ServiceConnection, SerialLi
 
     @Override
     public void onCreateOptionsMenu(@NonNull Menu menu, MenuInflater inflater) {
-        inflater.inflate(R.menu.menu_graph, menu);
+        inflater.inflate(R.menu.menu_ble_shared, menu);
+        this.menu = menu;
 
         bleStatus = menu.findItem(R.id.ble_status);
     }
@@ -183,9 +190,37 @@ public class BLEFragment extends Fragment implements ServiceConnection, SerialLi
     public boolean onOptionsItemSelected(MenuItem item) {
         int id = item.getItemId();
         if (id == R.id.ble_status) {
-            Toast.makeText(getActivity(), "Trying to reconnect.", Toast.LENGTH_SHORT).show();
-            Log.d(TAG, "Connection check from onOptionsItemSelected");
-            if (connected == Connected.False) connect();
+            if (connected == Connected.False) {
+                Toast.makeText(getActivity(), "Trying to reconnect.", Toast.LENGTH_SHORT).show();
+                connect();
+            } else {
+                Toast.makeText(getActivity(), "You may select a new CBASS.", Toast.LENGTH_LONG).show();
+                // If we don't disconnect, a new scan won't show the existing CBASS.
+                disconnect();
+                Fragment fragment = new DevicesFragment();
+                getParentFragmentManager().beginTransaction().replace(R.id.fragment, fragment, "DevicesFragment").addToBackStack(null).commit();
+            }
+            return true;
+        } if (id == R.id.monitor) {
+            Bundle args = new Bundle();
+            args.putString("device", deviceAddress);
+            Fragment fragment = new MonitorFragment();
+            fragment.setArguments(args);
+            getParentFragmentManager().beginTransaction().replace(R.id.fragment, fragment, "MonitorFragment").addToBackStack(null).commit();
+            return true;
+        } if (id == R.id.graph) {
+            Bundle args = new Bundle();
+            args.putString("device", deviceAddress);
+            Fragment fragment = new GraphFragment();
+            fragment.setArguments(args);
+            getParentFragmentManager().beginTransaction().replace(R.id.fragment, fragment, "GraphFragment").addToBackStack(null).commit();
+            return true;
+        } if (id == R.id.CBASS_tests) {
+            Bundle args = new Bundle();
+            args.putString("device", deviceAddress);
+            Fragment fragment = new TestCBASSFragment();
+            fragment.setArguments(args);
+            getParentFragmentManager().beginTransaction().replace(R.id.fragment, fragment, "CBASStest").addToBackStack(null).commit();
             return true;
         } else {
             return super.onOptionsItemSelected(item);
@@ -195,6 +230,7 @@ public class BLEFragment extends Fragment implements ServiceConnection, SerialLi
     /*
      * Serial + UI
      */
+    @SuppressLint("MissingPermission")
     void connect() {
         Log.d(TAG, "In connect");
         // Try this - if we already have a connected service, just return.
@@ -243,6 +279,7 @@ public class BLEFragment extends Fragment implements ServiceConnection, SerialLi
             SpannableStringBuilder spn = new SpannableStringBuilder(msg + '\n');
             spn.setSpan(new ForegroundColorSpan(getResources().getColor(R.color.colorSendText)), 0, spn.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
             service.write(data);
+            Log.d(TAG, "Sent " + str);
         } catch (Exception e) {
             onSerialIoError(e);
         }

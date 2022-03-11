@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/ble_status"
+        android:contentDescription="Bluetooth Status and Select"
+        android:icon="@android:drawable/stat_sys_data_bluetooth"
+        android:title="SCAN"
+        app:showAsAction="always" />
+
+    <item
+        android:id="@+id/monitor"
+        android:title="Graph"
+        android:icon="@drawable/outline_grid_view_24"
+        android:visible="true"
+        app:showAsAction="always" />
+    <item
+        android:id="@+id/graph"
+        android:title="Graph"
+        android:icon="@drawable/baseline_timeline_24"
+        android:visible="true"
+        app:showAsAction="always"
+        />
+    <item
+        android:id="@+id/CBASS_tests"
+        android:title="Test CBASS"
+        android:icon="@drawable/outline_fact_check_24"
+        android:visible="true"
+        app:showAsAction="always"
+        />
+    <item
+    android:id="@+id/bt_settings"
+    android:title="Settings" />
+</menu>

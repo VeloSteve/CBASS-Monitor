@@ -1,7 +1,6 @@
 package info.pml.cbass_monitor;
 
 import android.app.Activity;
-import android.content.ComponentName;
 import android.content.ServiceConnection;
 import android.graphics.Color;
 import android.os.Bundle;
@@ -9,7 +8,6 @@ import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
-import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
@@ -19,7 +17,6 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.fragment.app.Fragment;
 
 import com.jjoe64.graphview.GraphView;
 import com.jjoe64.graphview.series.DataPoint;
@@ -35,7 +32,7 @@ import de.kai_morich.simple_bluetooth_le_terminal.TextUtil;
 
 public class GraphFragment extends BLEFragment implements ServiceConnection {
 
-    private enum Connected { False, Pending, True }
+    //private enum Connected { False, Pending, True }
 
     private String deviceAddress;
 
@@ -44,7 +41,7 @@ public class GraphFragment extends BLEFragment implements ServiceConnection {
     private View updateBtn;
     private View repeatBtn;
 
-    private Connected connected = Connected.False;
+    //private Connected connected = Connected.False;
     private boolean initialStart = true;
     private boolean pendingNewline = false;
     private String newline = TextUtil.newline_crlf;
@@ -95,7 +92,7 @@ public class GraphFragment extends BLEFragment implements ServiceConnection {
         setHasOptionsMenu(true);
         setRetainInstance(true);
         // TODO: exit if deviceAddress is null?
-        // Maybe getActivity().getFragmentManager().beginTransaction().remove(this).commit();
+        // Maybe getActivity().getParentFragmentManager().beginTransaction().remove(this).commit();
         deviceAddress = getArguments().getString("device");
     }
 
@@ -291,30 +288,13 @@ public class GraphFragment extends BLEFragment implements ServiceConnection {
 
     @Override
     public void onCreateOptionsMenu(@NonNull Menu menu, MenuInflater inflater) {
-        inflater.inflate(R.menu.menu_graph, menu);
+        super.onCreateOptionsMenu(menu, inflater);
         this.menu = menu;
-        bleStatus = menu.findItem(R.id.ble_status);
-        bleStatus.setVisible(true); // ok to delete
+        // Hide this fragment's own icon.
+        menu.findItem(R.id.graph).setVisible(false);
+
     }
 
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        int id = item.getItemId();
-        if (id == R.id.ble_status) {
-            Toast.makeText(getActivity(), "Tring to reconnect.", Toast.LENGTH_SHORT).show();
-            if (connected == Connected.False) connect();
-            return true;
-        } if (id == R.id.CBASS_tests) {
-            Bundle args = new Bundle();
-            args.putString("device", deviceAddress);
-            Fragment fragment = new TestCBASSFragment();
-            fragment.setArguments(args);
-            getFragmentManager().beginTransaction().replace(R.id.fragment, fragment, "CBASStest").addToBackStack(null).commit();
-            return true;
-        } else {
-            return super.onOptionsItemSelected(item);
-        }
-    }
 
     @Override
     void receive(byte[] data) {

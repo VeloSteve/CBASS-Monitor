@@ -15,7 +15,12 @@
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
-            android:background="?attr/colorPrimary" />
+            android:background="?attr/colorPrimary"
+            app:title="CBASS Monitor"
+            app:titleMarginStart="0dp"
+            app:titleMarginEnd="0dp"
+            app:titleTextAppearance="@style/SmallerDeviceName"
+            />
 
     </com.google.android.material.appbar.AppBarLayout>
 

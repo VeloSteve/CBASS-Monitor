@@ -8,11 +8,9 @@ import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
-import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -27,6 +25,9 @@ public class TestCBASSFragment extends BLEFragment implements ServiceConnection,
 
     private final String TAG = "TestCBASSFragment";
 
+    private String deviceAddress;
+    private Menu menu;
+
     private View logButton;
     private View f3Button;
     private View l3Button;
@@ -35,7 +36,7 @@ public class TestCBASSFragment extends BLEFragment implements ServiceConnection,
     private TextView[] rowLabel = new TextView[numTests];
     private TextView[] rowResult = new TextView[numTests];
     private byte outputRow;
-    private byte generalRow = numTests - 1;
+    private final byte generalRow = numTests - 1;
     private TextView receiveText;
 
     //  use inherited version. private Connected connected = Connected.False;
@@ -98,6 +99,7 @@ public class TestCBASSFragment extends BLEFragment implements ServiceConnection,
         super.onCreate(savedInstanceState);
         setHasOptionsMenu(true);
         setRetainInstance(true);
+        deviceAddress = getArguments().getString("device");
 
     }
 
@@ -231,23 +233,11 @@ public class TestCBASSFragment extends BLEFragment implements ServiceConnection,
 
     @Override
     public void onCreateOptionsMenu(@NonNull Menu menu, MenuInflater inflater) {
-        inflater.inflate(R.menu.menu_testcbass, menu);
-        bleStatus = menu.findItem(R.id.ble_status);
-        // Tried connecting here, but service isn't ready.
-    }
+        super.onCreateOptionsMenu(menu, inflater);
+        this.menu = menu;
+        // Hide this fragment's own icon.
+        menu.findItem(R.id.CBASS_tests).setVisible(false);
 
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        int id = item.getItemId();
-        if (id == R.id.ble_status) {
-            Toast.makeText(getActivity(), "Trying to reconnect.", Toast.LENGTH_SHORT).show();
-            Log.d("BLE", "Calling connect on icon click.");
-            connectRetries = maxRetries;
-            if (connected == Connected.False) connect();
-            return true;
-        } else {
-            return super.onOptionsItemSelected(item);
-        }
     }
 
 
