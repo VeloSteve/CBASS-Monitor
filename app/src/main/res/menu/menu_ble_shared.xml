@@ -29,6 +29,11 @@
         app:showAsAction="always"
         />
     <item
-    android:id="@+id/bt_settings"
-    android:title="Settings" />
+        android:id="@+id/to_settings"
+        android:title="App Settings"
+        />
+    <item
+        android:id="@+id/to_control"
+        android:title="CBASS Control"
+        />
 </menu>

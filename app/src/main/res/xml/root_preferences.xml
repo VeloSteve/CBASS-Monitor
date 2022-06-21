@@ -1,0 +1,54 @@
+<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory app:title="@string/connect_prefs">
+
+        <ListPreference
+            app:defaultValue="CBASS"
+            app:entries="@array/device_list_labels"
+            app:entryValues="@array/device_values"
+            app:key="device_style"
+            app:title="@string/device_style"
+            app:useSimpleSummaryProvider="true" />
+
+        <EditTextPreference
+            app:key="connect_PIN"
+            app:title="@string/PIN_title"
+            app:useSimpleSummaryProvider="true" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="Panels">
+        <SwitchPreferenceCompat
+            app:key="testPanel"
+            app:defaultValue="true"
+            app:title="Test Functions" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="Graphing">
+        <ListPreference
+            app:defaultValue="720"
+            app:entries="@array/history_store_labels"
+            app:entryValues="@array/history_store_values"
+            app:key="maximum_history"
+            app:title="@string/maximum_history"
+            app:useSimpleSummaryProvider="true" />
+        <ListPreference
+            app:defaultValue="60"
+            app:entries="@array/history_display_labels"
+            app:entryValues="@array/history_display_values"
+            app:key="displayed_history"
+            app:title="@string/displayed_history"
+            app:useSimpleSummaryProvider="true" />
+        <ListPreference
+            app:defaultValue="5"
+            app:entries="@array/update_list_labels"
+            app:entryValues="@array/update_values"
+            app:key="update_rate"
+            app:title="@string/update_rate"
+            app:useSimpleSummaryProvider="true" />
+
+
+    </PreferenceCategory>
+
+</PreferenceScreen>

@@ -7,30 +7,11 @@
     <TableLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_margin="24dp"
+        android:layout_marginVertical="10dp"
+        android:layout_marginHorizontal="50dp"
         android:layout_weight="0"
         android:shrinkColumns="1,2">
 
-        <TableRow
-            android:id="@+id/temps_header"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent">
-
-            <TextView
-                android:id="@+id/blank"
-                android:layout_margin="10dp"
-                android:text=""
-                android:textAppearance="@style/TextAppearance.AppCompat.Display1" />
-
-            <TextView
-                android:id="@+id/labelWide"
-                android:layout_margin="10dp"
-                android:layout_span="2"
-                android:text="Temperature"
-                android:textAlignment="center"
-                android:textAppearance="@style/TextAppearance.AppCompat.Display1" />
-
-        </TableRow>
 
         <TableRow
             android:id="@+id/temps_row1"
@@ -48,14 +29,14 @@
                 android:layout_margin="10dp"
                 android:text="Actual"
                 android:textAlignment="textEnd"
-                android:textAppearance="@style/TextAppearance.AppCompat.Display1" />
+                android:textAppearance="@style/TextAppearance.AppCompat.Large" />
 
             <TextView
                 android:id="@+id/tank0"
                 android:layout_margin="10dp"
                 android:text="Target"
                 android:textAlignment="textEnd"
-                android:textAppearance="@style/TextAppearance.AppCompat.Display1" />
+                android:textAppearance="@style/TextAppearance.AppCompat.Large" />
 
         </TableRow>
 
@@ -67,14 +48,14 @@
             <TextView
                 android:id="@+id/tank1"
                 android:layout_column="0"
-                android:layout_margin="10dp"
+                android:layout_margin="5dp"
                 android:text="Tank 1"
                 android:textAppearance="@style/TextAppearance.AppCompat.Large" />
 
             <TextView
                 android:id="@+id/mon_temp1"
                 android:layout_column="1"
-                android:layout_margin="10dp"
+                android:layout_margin="5dp"
                 android:ems="7"
                 android:inputType="numberDecimal"
                 android:text="@string/blank_number"
@@ -84,7 +65,7 @@
             <TextView
                 android:id="@+id/mon_set1"
                 android:layout_column="2"
-                android:layout_margin="10dp"
+                android:layout_margin="5dp"
                 android:ems="10"
                 android:inputType="numberDecimal"
                 android:text="@string/blank_number"
@@ -100,14 +81,14 @@
             <TextView
                 android:id="@+id/tank2"
                 android:layout_height="wrap_content"
-                android:layout_margin="10dp"
+                android:layout_margin="5dp"
                 android:text="Tank 2"
                 android:textAppearance="@style/TextAppearance.AppCompat.Large" />
 
             <TextView
                 android:id="@+id/mon_temp2"
                 android:layout_height="wrap_content"
-                android:layout_margin="10dp"
+                android:layout_margin="5dp"
                 android:ems="10"
                 android:inputType="numberDecimal"
                 android:text="@string/blank_number"
@@ -117,7 +98,7 @@
             <TextView
                 android:id="@+id/mon_set2"
                 android:layout_height="wrap_content"
-                android:layout_margin="10dp"
+                android:layout_margin="5dp"
                 android:ems="10"
                 android:inputType="numberDecimal"
                 android:text="@string/blank_number"
@@ -132,14 +113,14 @@
             <TextView
                 android:id="@+id/tank3"
                 android:layout_height="wrap_content"
-                android:layout_margin="10dp"
+                android:layout_margin="5dp"
                 android:text="Tank 3"
                 android:textAppearance="@style/TextAppearance.AppCompat.Large" />
 
             <TextView
                 android:id="@+id/mon_temp3"
                 android:layout_height="wrap_content"
-                android:layout_margin="10dp"
+                android:layout_margin="5dp"
                 android:ems="10"
                 android:inputType="numberDecimal"
                 android:text="@string/blank_number"
@@ -149,7 +130,7 @@
             <TextView
                 android:id="@+id/mon_set3"
                 android:layout_height="wrap_content"
-                android:layout_margin="10dp"
+                android:layout_margin="5dp"
                 android:ems="10"
                 android:inputType="numberDecimal"
                 android:text="@string/blank_number"
@@ -164,14 +145,14 @@
             <TextView
                 android:id="@+id/tank4"
                 android:layout_height="wrap_content"
-                android:layout_margin="10dp"
+                android:layout_margin="5dp"
                 android:text="Tank 4"
                 android:textAppearance="@style/TextAppearance.AppCompat.Large" />
 
             <TextView
                 android:id="@+id/mon_temp4"
                 android:layout_height="wrap_content"
-                android:layout_margin="10dp"
+                android:layout_margin="5dp"
                 android:ems="10"
                 android:inputType="numberDecimal"
                 android:text="@string/blank_number"
@@ -181,7 +162,7 @@
             <TextView
                 android:id="@+id/mon_set4"
                 android:layout_height="wrap_content"
-                android:layout_margin="10dp"
+                android:layout_margin="5dp"
                 android:ems="10"
                 android:inputType="numberDecimal"
                 android:text="@string/blank_number"
@@ -196,19 +177,19 @@
             <TextView
                 android:id="@+id/label_time"
                 android:layout_height="wrap_content"
-                android:layout_margin="10dp"
-                android:text="at\nCBASS\ntime"
+                android:layout_margin="5dp"
+                android:text="at CBASS time"
                 android:textAlignment="center"
                 android:textAppearance="@style/TextAppearance.AppCompat.Large" />
 
             <TextView
                 android:id="@+id/cbass_time"
                 android:layout_height="match_parent"
-                android:layout_margin="10dp"
+                android:layout_margin="5dp"
                 android:layout_span="2"
                 android:inputType="time"
                 android:text="00:00"
-                android:gravity="center"
+                android:gravity="left"
                 android:textAppearance="@style/TextAppearance.AppCompat.Large" />
 
         </TableRow>

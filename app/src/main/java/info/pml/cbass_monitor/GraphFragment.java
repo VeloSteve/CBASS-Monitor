@@ -1,7 +1,10 @@
 package info.pml.cbass_monitor;
 
+import static java.lang.Math.min;
+
 import android.app.Activity;
 import android.content.ServiceConnection;
+import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.util.Log;
@@ -17,14 +20,23 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
+import androidx.preference.ListPreference;
+import androidx.preference.PreferenceManager;
 
 import com.jjoe64.graphview.GraphView;
+import com.jjoe64.graphview.GridLabelRenderer;
+import com.jjoe64.graphview.helper.DateAsXAxisLabelFormatter;
 import com.jjoe64.graphview.series.DataPoint;
 import com.jjoe64.graphview.series.LineGraphSeries;
 
-import java.util.Arrays;
+import static java.text.DateFormat.SHORT;
+import java.text.DateFormat;
 import java.util.Collections;
+import java.util.Date;
 import java.util.InputMismatchException;
+import java.util.Map;
+import java.util.Random;
 import java.util.Timer;
 import java.util.TimerTask;
 
@@ -33,71 +45,79 @@ import de.kai_morich.simple_bluetooth_le_terminal.TextUtil;
 public class GraphFragment extends BLEFragment implements ServiceConnection {
 
     //private enum Connected { False, Pending, True }
+    private final String TAG = "GraphFragment";
+    //private String deviceAddress;
 
-    private String deviceAddress;
+    //private Menu menu;
 
-    private Menu menu;
-
-    private View updateBtn;
-    private View repeatBtn;
-
-    //private Connected connected = Connected.False;
-    private boolean initialStart = true;
-    private boolean pendingNewline = false;
-    private String newline = TextUtil.newline_crlf;
+    private Button updateBtn;
+    private Button repeatBtn;
 
     private String msgBuffer = "";
 
-    private enum ExpectBLEData {
-        Nothing,
-        Batch
-    }
-    private ExpectBLEData expectBLE = ExpectBLEData.Nothing;
-
-    private enum BatchState {
-        Time,
-        Measured,
-        Planned,
-        Nothing
-    }
-    BatchState batchState = BatchState.Time;
     private boolean addToEnd = true;
     private boolean noMoreOldData = false;
 
 
     // Don't update forever - it slows the temperature checks a bit.
     private final int maxUpdates = 65;
-    private int updatesLeft = maxUpdates;
-    private final int fillDataMillis = 10000;  // 1/minute is planned, debugging w/ 10 seconds, 5 updates.
-    private final int appendDataMillis = 60000;  // 1/minute is planned, debugging w/ 10 seconds, 5 updates.
+    private int updatesLeft = 0;  // Initialize to 0 so we don't think we are mid-repeat when getting an empty return.
+    private final int fillDataMillis = 60000;  // 1/minute is planned, debugging w/ 10 seconds, 5 updates.
+
+    // We can re-use the preferences object, but must get the values at the time of use in case of changes.
+    SharedPreferences sharedPreferences;
+    int oldMaxHistory = 0;  // So we can check backward if the maximum history value increases.
+    int maxHistory = 0;  // So we can check backward if the maximum history value increases.
     Timer monTimer;  // For repeated calls for data
     TimerTask monTask;  // The repeated task.
-    Timer connCheckTimer; // For noticing when the connection is dropped.
+    //Timer connCheckTimer; // For noticing when the connection is dropped.
 
     // Set up parameters for the data to show in a default graph.  After this works,
     // make a set of optional graphs.  For example, last 15 minutes in detail, full run to now, and full run including future plan.
     private TemperatureData savedData;
-    private final int graphedDuration = 60 * 30; // 30 minutes, in seconds.
+    private final int bytesPerReturnedLine = 50;
     // Data as used by the graph.
     private LineGraphSeries<DataPoint>[] graphData = new LineGraphSeries[8];
     private GraphView graph;
-    private boolean seriesVisible[] = {true, true, true, true, true, true, true, true, true};
+    private boolean[] seriesVisible = {true, true, true, true, true, true, true, true, true};
+    private boolean usingDummy = false;
 
     /*
      * Lifecycle
      */
+
+    /**
+     * Save data for use after rotations, fragment swaps, and so on.
+     */
+    @Override
+    public void onSaveInstanceState(@NonNull Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putSerializable("saved data", savedData);
+        outState.putBoolean("dummy flag", usingDummy);
+    }
+
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setHasOptionsMenu(true);
-        setRetainInstance(true);
+        // Best practice seems to be NOT to use the next line, at least unless there are AsyncTasks.
+        // setRetainInstance(true); // When true onCreate is only called once.
         // TODO: exit if deviceAddress is null?
         // Maybe getActivity().getParentFragmentManager().beginTransaction().remove(this).commit();
         deviceAddress = getArguments().getString("device");
+
+        // Some graphing options are stored as preferences.  Get the reference here, but
+        // check values as they are needed.
+        sharedPreferences = PreferenceManager.getDefaultSharedPreferences(getContext());
     }
 
     @Override
     public void onPause() {
+        // Don't leave timers running.
+        if (monTimer != null) monTimer.cancel();
+        if (monTask != null) monTask.cancel();
+        monTimer = null;
+        monTask = null;
         // Set app name back to default (from device name)
         ((AppCompatActivity) getActivity()).getSupportActionBar().setTitle(getResources().getString(R.string.app_name));
         super.onPause();
@@ -113,7 +133,6 @@ public class GraphFragment extends BLEFragment implements ServiceConnection {
         super.onStop();
     }
 
-    @SuppressWarnings("deprecation") // onAttach(context) was added with API 23. onAttach(activity) works for all API versions
     @Override
     public void onAttach(@NonNull Activity activity) {
         super.onAttach(activity);
@@ -128,6 +147,7 @@ public class GraphFragment extends BLEFragment implements ServiceConnection {
     @Override
     public void onResume() {
         super.onResume();
+        startUpdateTimer();
     }
 
     /*
@@ -136,31 +156,50 @@ public class GraphFragment extends BLEFragment implements ServiceConnection {
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_graph, container, false);
+        graph = view.findViewById(R.id.graph);
 
-
-        // Just to exercise the new classes, build some points manually and then
-        // use them to graph.
-        savedData = new TemperatureData();
-
-        graph = (GraphView) view.findViewById(R.id.graph);
-        // Add empty series - we fill them later.
-        for (int i = 0; i < 8; i++) {
-            graphData[i] = new LineGraphSeries<DataPoint>();
-            graph.addSeries(graphData[i]);
+        // Three cases:
+        // 1) First time here, we need to create some dummy data.
+        // 2) On orientation changes we have a savedInstanceState from which data must be obtained.
+        // 3) On switching back to this fragment after visiting another the data is apparently in
+        //    place without a savedInstanceState.  Just move on.
+        // Maybe I don't understand 2)!  We seem to get the savedInstanceState, but savedData is
+        // not null.  Why restore it?
+        if (savedInstanceState != null) {
+            savedData = (TemperatureData) savedInstanceState.getSerializable("saved data");
+            usingDummy = savedInstanceState.getBoolean("dummy flag");
+        } else if (savedData == null) {
+            // Just to exercise the new classes, build some points manually and then
+            // use them to graph.
+            // This can also be a "placeholder" until real data is obtained.
+            savedData = new TemperatureData();
+            addDummySavedData();
+            usingDummy = true;
+            // Add empty series in not already in state - we fill them later.
+            /*
+            if (graphData[0] == null) {
+                for (int i = 0; i < 8; i++) {
+                    graphData[i] = new LineGraphSeries<DataPoint>();
+                    graph.addSeries(graphData[i]);
+                }
+                addDummyGraphData();
+            }
+             */
         }
-        graph.getGridLabelRenderer().setHorizontalAxisTitle("Arduino Run Time (min)");
+
+        // Axis labels
+        graph.getGridLabelRenderer().setHorizontalAxisTitle("Time of Day");
         graph.getGridLabelRenderer().setVerticalAxisTitle("Temperature (°C)");
+        // Time formatting on horizontal axis
+        DateFormat df = DateFormat.getTimeInstance(SHORT);
+        graph.getGridLabelRenderer().setLabelFormatter(new DateAsXAxisLabelFormatter(getActivity(), df));
+        graph.getGridLabelRenderer().setNumHorizontalLabels(3); // only 4 because of the space
+        // Internal grids.
+        graph.getGridLabelRenderer().setGridStyle(GridLabelRenderer.GridStyle.BOTH);
+        graph.getGridLabelRenderer().setHumanRounding(false, true);
 
-
-        // TODO: this fixes the failure of GraphView to correctly scale the X axis, but it messes
-        // up the labels.  Preferably, fix the autoscaling and remove the next two lines. Second choice, fix the labels.
-        //graph.getViewport().setXAxisBoundsManual(true);
-        //graph.getViewport().setMaxX(savedData.getLastTime());
-
-        // Shows correct X range, but when it is 1000 to 2500 the graph only plots 1000 to 1800!
         Toast.makeText(getActivity(), graph.getViewport().getMinX(true) + " to " + graph.getViewport().getMaxX(true), Toast.LENGTH_LONG).show();
         graph.setTitle("Example");
-
 
         // Button Actions (what to send)
 
@@ -172,9 +211,9 @@ public class GraphFragment extends BLEFragment implements ServiceConnection {
                 @Override
                 public void onClick(View v) {
                     monTimer = null; // In case a repeating update was still running.
-                    expectBLE = ExpectBLEData.Batch;
                     msgBuffer = ""; // start empty.  TODO: grey out the button while a batch is in progress
-                    send(getDataRequest());
+                    Log.d(TAG, "updateBtn send()");
+                    send(getDataRequest(), ExpectBLEData.Batch);
 
             }
         });
@@ -210,6 +249,8 @@ public class GraphFragment extends BLEFragment implements ServiceConnection {
         setToggle(planToggle, 7);
 
 
+        // Not always needed.  Helps on restore.
+        updateGraph();
         return view;
     }
 
@@ -232,8 +273,8 @@ public class GraphFragment extends BLEFragment implements ServiceConnection {
         monTask = new TimerTask() {
             @Override
             public void run() {
-                expectBLE = ExpectBLEData.Batch;
-                send(getDataRequest());
+                Log.d(TAG, "timerTask send()");
+                send(getDataRequest(), ExpectBLEData.Batch);
                 updatesLeft--;
             }
         };
@@ -245,13 +286,16 @@ public class GraphFragment extends BLEFragment implements ServiceConnection {
 
     /**
      * Depending on the graph option being shown, ask CBASS for any data needed to update the
-     * graph.  The protocol is a comma-separated list of
-     * - the letter "m"
-     * - the maximum number of data points to return, negative if stepping back in time.
-     * - the first timestamp of interest in CBASS milliseconds. Typically one more or less
-     *   than in the existing data.
+     * graph.  For new we don't attempt to find and fill gaps in the data, only adding to the
+     * beginning or end of the sequence in memory.
      *
-     * @return
+     * The protocol is a comma-separated list of
+     * - the letter "b"
+     * - the maximum number of data points to return, negative if stepping back in time.
+     * - the first timestamp of interest in seconds since 2000, typically starting one
+     *   unit beyond the the existing data.
+     *
+     * @return the request to be sent to CBASS
      */
     private String getDataRequest() {
         // If we have no saved data we don't know where the CBASS timer might be.  Ask
@@ -260,36 +304,67 @@ public class GraphFragment extends BLEFragment implements ServiceConnection {
         // until the full time range required is needed.  When that is satisfied, append from the
         // last point forward.
         // TODO: detect and fill gaps in the sequence of locally saved data.
-        long start = 100000000;  // this may have been excessive: Long.MAX_VALUE;
-        // A 50-line request works fine (minimal testing), but takes 5324 millis, which is
-        // perhaps longer than we should block other CBASS actions.  But that was with debug prints.
-        // Without debug the rate is quite linear with 84 ms constant plus 14.1 ms per point.
-        // Use 50 lines, which should take about 790 ms.  When using a default of one point every
+        long startSecond;
+
+        // Requests take 84 ms constant plus 14.1 ms per point.
+        // Using 50 lines, this is about 790 ms.  When using a default of one point every
         // 30 seconds this covers 25 minutes per request.
-        long lines = 50;
-        if (savedData.size() > 0) {
-            // See if we need older data.
-            long spanStored = savedData.getLastTime() - savedData.getFirstTime();
-            if (graphedDuration * 1000 > spanStored && !noMoreOldData) {
+        // Note that if debug printing in the app is turned on this can be much slower.
+        // Actual timings 13 Jun 2022: 50 lines, 668 ms; 50 lines 661 ms.
+        // 100 lines, 1373 ms; 100 lines, 1413 ms.
+        // New estimated rate: 58 ms constant, 14.5 ms per point
+
+        long lines = 60;
+
+        // If the historical time to save has increased, we have to check backwards in time even
+        // if we previous obtained all desired old data and started moving forward.
+        // First, see whether the graphed time has increased beyond the stored time, in which case
+        // the stored time should increase.
+       // int maxStore = Integer.parseInt(sharedPreferences.getString("displayed_history", "17"));
+        maxHistory = Integer.parseInt(sharedPreferences.getString("maximum_history", "17"));
+
+        /*
+         * Handle the case where we want to graph more than we store?
+        int maxDisp = Integer.parseInt(sharedPreferences.getString("displayed_history", "17"));
+        if (maxHistory < maxDisp) {
+
+        }
+         */
+
+
+        if (maxHistory > oldMaxHistory && !usingDummy) {
+            noMoreOldData = false;
+        }
+        oldMaxHistory = maxHistory;
+
+
+        if (savedData.size() > 0 && !usingDummy) {
+            //long spanStored = savedData.getLastTime() - savedData.getFirstTime();
+            // See if we need older or newer data and offset the start by one
+            // unit from the last point in the chosen direction.
+            if (noMoreOldData) {
+                startSecond = savedData.getLastTime() + 1;
+                addToEnd = true;
+            } else {
                 lines = -lines;
+                startSecond = savedData.getFirstTime() - 1;
                 // So we know where to put incoming lines.
                 addToEnd = false;
-                start = savedData.getFirstTime() - 1;
-            } else {
-                addToEnd = true;
-                start = savedData.getLastTime() + 1;
             }
         } else {
             // Starting at a huge time, working backward.
+            noMoreOldData = false;  // Starting assumptions
+            addToEnd = false;
+            startSecond = 999999999; // about 2031
             lines = -lines;
         }
-        return "b," + lines + "," + start;
+        return "b," + lines + "," + startSecond;
     }
 
     @Override
     public void onCreateOptionsMenu(@NonNull Menu menu, MenuInflater inflater) {
         super.onCreateOptionsMenu(menu, inflater);
-        this.menu = menu;
+        //this.menu = menu;
         // Hide this fragment's own icon.
         menu.findItem(R.id.graph).setVisible(false);
 
@@ -300,11 +375,13 @@ public class GraphFragment extends BLEFragment implements ServiceConnection {
     void receive(byte[] data) {
 
         String msg = new String(data);
-        if(newline.equals(TextUtil.newline_crlf) && msg.length() > 0) {
+        //private Connected connected = Connected.False;
+        //String newline = TextUtil.newline_crlf;
+        //if(newline.equals(TextUtil.newline_crlf) && msg.length() > 0) {
+        // removed "if" - always active.
+        if(msg.length() > 0) {
             // don't show CR as ^M if directly before LF
             msg = msg.replace(TextUtil.newline_crlf, TextUtil.newline_lf);
-
-            pendingNewline = msg.charAt(msg.length() - 1) == '\r';
         }
 
         if (expectBLE == ExpectBLEData.Batch) {
@@ -312,7 +389,10 @@ public class GraphFragment extends BLEFragment implements ServiceConnection {
             msgBuffer = msgBuffer + msg;
             Log.d("COLLECT", "msg is now >" + msg + "<");
             if (msgBuffer.endsWith("BatchDone")) {
-                if (parseBatch(msgBuffer) > 0) {
+                expectBLE = ExpectBLEData.Nothing;
+                // If it also starts with BatchDone, no lines matched the request.
+                // Otherwise parse, normally expecting a > 0 response.
+                if (!msgBuffer.startsWith("BatchDone") && parseBatch(msgBuffer) > 0) {
                     updateGraph();
                 } else {
                     // No new lines.  If we are in the state of adding to the end, no action.
@@ -323,22 +403,23 @@ public class GraphFragment extends BLEFragment implements ServiceConnection {
                         addToEnd = true;
                         noMoreOldData = true;
 
-                        expectBLE = ExpectBLEData.Batch;
                         msgBuffer = "";
                         // Restart multiple requests if in progress, otherwise send
                         // one request to get data from the end, if any.
                         if (updatesLeft > 0) {
+                            // 1/minute is planned, debugging w/ 30 seconds, 5 updates.
+                            int appendDataMillis = Integer.parseInt(sharedPreferences.getString("update_rate", "17"));
                             Log.d("COLLECT", "Changing repeat interval to " + appendDataMillis + " ms.");
                             startUpdateRepeats(appendDataMillis);
                         } else {
-                            send(getDataRequest());
+                            send(getDataRequest(), ExpectBLEData.Batch);
                         }
                     }
                 }
                 msgBuffer = "";
-                expectBLE = ExpectBLEData.Nothing;
             }
-
+        } else {
+            Log.w(TAG, "Unexpected data expectation for this class: " + expectBLE.toString());
         }
     }
 
@@ -356,41 +437,63 @@ public class GraphFragment extends BLEFragment implements ServiceConnection {
      */
     private int parseBatch(String buf) {
 
-        int timeLen = 8;    // One 8-character long
-        int tSetLen = 4*5;  // Four 4-character times with commas
-        String[] parts;
+        final int lineLen = 5+5+5*8-1;
+
+        String[] points;
         int count = 0;
 
-        // Each point starts with T.
-        while (buf.length() > 0 && !buf.startsWith(("BatchDone"))) {
-            Log.d("PARSE", buf);
-            if (!buf.startsWith("T")) {
-                throw new InputMismatchException("Batch must start with a T.");
-            } else if (buf.length() < timeLen + 2 * tSetLen + 2) {
-                throw new InputMismatchException("Not enough data in buffer for a graph point. >" + buf + "<");
-            }
-            TempPoint incomingPoint = new TempPoint(buf.substring(1, timeLen + 1));  // substring is inclusive/exclusive
-            buf = buf.substring(timeLen + 2);  // drop T12345678,
-
-            parts = buf.split(",", 5);  // 4 temps and leftovers
-            incomingPoint.setMeasured(Arrays.copyOfRange(parts, 0, 4));
-            buf = buf.substring(tSetLen);
-
-            parts = buf.split(",", 5);  // 4 temps and leftovers
-            incomingPoint.setTarget(Arrays.copyOfRange(parts, 0, 4));
-            buf = buf.substring(tSetLen);
-
-            count++;
-            if (addToEnd) {
-                Log.d("PARSE", "Saving point at end " + incomingPoint);
-                savedData.add(incomingPoint);
+        // Check some basic requirements.
+        Log.d("PARSE", "Full input: " + buf);
+        if (!buf.startsWith("T")) {
+            throw new InputMismatchException("Batch must start with a T.");
+        } else if (buf.length() < lineLen) {
+            throw new InputMismatchException("Not enough data in buffer for a graph point. >" + buf + "<");
+        }
+        if (!buf.endsWith("BatchDone")) {
+            throw new InputMismatchException("Batch must end with BatchDone.");
+        }
+        // Remove the leading T and trailing BatchDone  There may also be an "AT+BLEUARTTX=".
+        if (buf.indexOf("AT") > 0) {
+            buf = buf.substring(1, min(buf.indexOf("B"), buf.indexOf("AT")));
+        } else {
+            buf = buf.substring(1, buf.indexOf("B"));
+        }
+        Log.d("PARSE", "Input substring: " + buf);
+        // Parse out the individual time points, but let TempPoint parse the time and temperatures.
+        points = buf.split("T", 0);
+        Log.d("PARSE", "Building " + points.length + " points.");
+        if (usingDummy && !(points.length == 0)) {
+            // New CBASS data must replace old "dummy" data from startup.
+            savedData.clear();
+            usingDummy = false;
+        }
+        for (String p: points) {
+            // Let TempPoint do the remaining parsing so the code is the same here and in GraphFragment
+            Log.d("PARSE", "Single line: " + p);
+            if (p.length() < bytesPerReturnedLine) {
+                Log.w("PARSE", "Skipping a short temperature log line.");
             } else {
-                Log.d("PARSE", "Saving point at start " + incomingPoint);
+                TempPoint incomingPoint = new TempPoint(p);  // substring is inclusive/exclusive
+                count++;
+                if (addToEnd) {
+                    Log.d("PARSE", "Saving point at end " + incomingPoint);
+                    savedData.add(incomingPoint);
+                } else {
+                    Log.d("PARSE", "Saving point at start " + incomingPoint);
 
-                // Could be slow - if so save up incoming batches and do a single add/sort per batch.
-                savedData.add(0, incomingPoint);
+                    // Could be slow - if so save up incoming batches and do a single add/sort per batch.
+                    savedData.add(0, incomingPoint);
+                }
             }
         }
+        // If more data is stored than we want to allow, delete the oldest points.
+        // Assumes that maxHistory doesn't change (in preferences) between a request and response.
+        int rem = savedData.trimRange(maxHistory);
+        // If points were deleted the next request should look forward in time.
+        if (rem > 0) noMoreOldData = true;  // no need to set addToEnd, which is set at each new request.
+
+        Toast.makeText(getActivity(), savedData.size() + " points, " + count + " added, " + rem + " removed.", Toast.LENGTH_LONG).show();
+        Log.d(TAG, savedData.size() + " points, " + count + " added, " + rem + " removed.");
         return count;
     }
 
@@ -405,8 +508,8 @@ public class GraphFragment extends BLEFragment implements ServiceConnection {
         //Collections.sort(savedData, Collections.reverseOrder());  // The LineGraphSeries must be built in ascending order.
         Collections.sort(savedData);  // The LineGraphSeries must be built in ascending order.
         if (savedData.size() > 1) {
-            Log.d("UPDATE", "sD[0] millis = " + savedData.get(0).millis);
-            Log.d("UPDATE", "sD[1] millis = " + savedData.get(1).millis);
+            Log.d("UPDATE", "sD[0] timestamp = " + savedData.get(0).seconds2000());
+            Log.d("UPDATE", "sD[1] timestamp = " + savedData.get(1).seconds2000());
         }
 
             // Does emptying the original copy of the series erase or "break" the graph?
@@ -415,16 +518,29 @@ public class GraphFragment extends BLEFragment implements ServiceConnection {
             graphData[i].setDrawDataPoints(true);
 
         }
+        // Note that DataPoint expects x (if it is a time) in milliseconds since 1970, but as a double.
         TempPoint p;
-        for (int i = 0; i < 4; i++) {
-            for (int j = 0; j < savedData.size(); j++) {
-                p = savedData.get(j);
-                graphData[i].appendData(new DataPoint((double) p.getMinutes(), p.measured[i]), true, 500, true);
-                graphData[i + 4].appendData(new DataPoint((double) p.getMinutes(), p.target[i]), true, 500, true);
+        Date d = new Date(); // Re-use since DataPoint just extracts the time again.
+        // We only want to look back some maximum number of minutes.  Whether this should be
+        // from present moment or the last data point is arguable, but this is easy and may be what's
+        // wanted.
+        int maxMinutesDisplayed = Integer.parseInt(sharedPreferences.getString("displayed_history", "17"));
+        long cutoff = savedData.getLastTime() - (long)maxMinutesDisplayed * 60;
+        for (int j = 0; j < savedData.size(); j++) {
+            p = savedData.get(j);
+            // Skip any points before the window we want to display.
+            if (p.seconds2000() < cutoff) {
+                continue;
+            }
+            d.setTime(p.msec70());
+            for (int i = 0; i < 4; i++) {
+                // maxDataPoints is just set to a large value because we manage that elsewhere.
+                graphData[i].appendData(new DataPoint(d, p.measured[i]), true, 5000, true);
+                graphData[i + 4].appendData(new DataPoint(d, p.target[i]), true, 5000, true);
             }
         }
         graph.removeAllSeries();
-        //}
+        // XXX why check for size after removeAllSeries?
         if (graph.getSeries().size() == 0) {
             for (int i = 0; i < 8; i++) {
                 if (seriesVisible[i]) {
@@ -432,7 +548,8 @@ public class GraphFragment extends BLEFragment implements ServiceConnection {
                     // Didn't work when called during series creation.  Maybe after adding is better?
                     switch (i % 4) {
                         case 0:
-                            graphData[i].setColor(getResources().getColor(R.color.colorTank1));
+                            //graphData[i].setColor(getResources().getColor(R.color.colorTank1));
+                            graphData[i].setColor(gc(R.color.colorTank1));
                             break;
                         case 1:
                             graphData[i].setColor(getResources().getColor(R.color.colorTank2));
@@ -453,27 +570,105 @@ public class GraphFragment extends BLEFragment implements ServiceConnection {
         } else if (graph.getSeries().size() != 8) {
             Toast.makeText(getActivity(), "bad series count.  Always 0 or 8.  Got " + graph.getSeries().size(), Toast.LENGTH_LONG).show();
         }
-        // Toast.makeText(getActivity(), "Updating Graph", Toast.LENGTH_LONG).show();
+
+        // Auto-scaling the X axis doesn't work well for dates.  Try choosing limits that will
+        // work well and align nice-looking values with the grids.
+        // We currently display 15, 60, or 180 minutes, and larger, always up to current time.
+        if (!usingDummy) {
+            graph.getViewport().setXAxisBoundsManual(true);
+            graph.getGridLabelRenderer().setNumHorizontalLabels(3); // only 4 because of the space
+            Date now = new Date();
+            Log.d(TAG, "Scaling graph based on current time " + now);
+            Date limit = now;
+            // Round up to minutes.
+            if (limit.getSeconds() > 0) {
+                limit.setMinutes(limit.getMinutes() + 1);
+                limit.setSeconds(0);
+            }
+            int minutes = limit.getMinutes();
+            if (maxMinutesDisplayed < 60) {
+                // Up to nearest 5 minutes
+                if (minutes > 55) {
+                    limit.setMinutes(0);
+                    limit.setHours(limit.getHours() + 1);
+                } else if (minutes % 5 > 0) {
+                    limit.setMinutes(minutes + (5 - minutes % 5));
+                }
+                Log.d(TAG, "Scaling graph to right limit  " + limit);
+                graph.getViewport().setMaxX(limit.getTime());
+                // Now set the lower limit.  If we go 5 minutes longer than the
+                // specified range this will always include the requested data and not jump
+                // between (say) 15 and 20 minute windows.
+                // We don't need to count minutes and hours because the value is in ms.
+                graph.getViewport().setMinX(limit.getTime() - (maxMinutesDisplayed + 5) * 60000);
+            } else if (maxMinutesDisplayed == 60) {
+                // Up to nearest 15 minutes for 60-minute graph.
+                if (minutes % 5 > 0) {
+                    limit.setMinutes(minutes + (15 - minutes % 15));
+                }
+                Log.d(TAG, "Scaling graph to right limit  " + limit);
+                graph.getViewport().setMaxX(limit.getTime());
+                // Now set the lower limit cover 75 minutes.
+                graph.getViewport().setMinX(limit.getTime() - (maxMinutesDisplayed + 15) * 60000);
+            } else if (maxMinutesDisplayed > 60) {
+                // Up to nearest hour minutes graphs longer than an hour.
+                if (minutes > 0) {
+                    limit.setHours(1 + limit.getHours());
+                    limit.setMinutes(0);
+                }
+                Log.d(TAG, "Scaling graph to right limit  " + limit);
+                graph.getViewport().setMaxX(limit.getTime());
+                // Now set the lower limit cover 75 minutes.
+                graph.getViewport().setMinX(limit.getTime() - (maxMinutesDisplayed + 60) * 60000);
+            } else {
+                Log.e(TAG, "Unsupported x axis range");
+            }
+        }
+
 
         graph.onDataChanged(true, false);
     }
 
+    /**
+     * A little helper for getColor, since the original was deprecated and I don't want
+     * to assume that the workaround will always be acceptable.
+     */
+    int gc(int id) {
+        //getResources().getColor(id);
+        return ContextCompat.getColor(getContext(), id);
+    }
 
     /**
      * Change color and activity status of all buttons affected by whether there is a current
      * connection.
-     * @param isConnected
+     * @param isConnected true if Bluetooth LE is connected
      */
     @Override
     void updateButtons(boolean isConnected) {
-        if (isConnected) {
-            updateBtn.setActivated(true);
-            repeatBtn.setActivated(true);
-        } else {
-            if (updateBtn != null) updateBtn.setActivated(false);
-            if (repeatBtn != null) repeatBtn.setActivated(false);
-        }
         super.updateButtons(isConnected);
+        if (updateBtn == null || repeatBtn == null) return;
+        // Without the thread this causes a crash!  Something about looper threads...
+        requireActivity().runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                updateBtn.setEnabled(isConnected);
+                repeatBtn.setEnabled(isConnected);
+            }
+        });
     }
 
+    void addDummySavedData() {
+        int sample = 20;
+        // From RTClib: #define SECONDS_FROM_1970_TO_2000 946684800
+        long secs = 708020880; // seconds since 2000, approximately
+        Random r = new Random();
+        TempPoint tp;
+        float t = 24;
+        for (int j = 0; j < sample; j++) {
+            tp = new TempPoint(secs, t, t+1, t+2, t+3, t, t-1, t-2, t-3);
+            savedData.add(tp);
+            secs = secs + 20*60;
+            t = t + r.nextInt(5) - 2;
+        }
+    }
 }

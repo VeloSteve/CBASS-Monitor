@@ -18,6 +18,7 @@ import android.util.Log;
 
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
+import androidx.core.content.ContextCompat;
 
 import java.io.IOException;
 import java.util.LinkedList;
@@ -195,7 +196,9 @@ public class SerialService extends Service implements SerialListener {
         PendingIntent restartPendingIntent = PendingIntent.getActivity(this, 1, restartIntent,  PendingIntent.FLAG_UPDATE_CURRENT);
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, Constants.NOTIFICATION_CHANNEL)
                 .setSmallIcon(R.drawable.ic_notification)
-                .setColor(getResources().getColor(R.color.colorPrimary))
+                // Next line works fine except for a deprecation warning:
+                //.setColor(getResources().getColor(R.color.colorPrimary))
+                .setColor(ContextCompat.getColor(this, R.color.colorPrimary))
                 .setContentTitle(getResources().getString(R.string.app_name))
                 .setContentText(socket != null ? "Connected to "+socket.getName() : "Background Service")
                 .setContentIntent(restartPendingIntent)

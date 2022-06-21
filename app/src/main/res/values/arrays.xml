@@ -10,4 +10,68 @@
         <item>\u000a</item>
         <item></item>
     </string-array>
+
+    <!-- CBASS recognition -->
+    <string-array name="device_list_labels">
+        <item>Any named device</item>
+        <item>Must contain CBASS</item>
+        <item>Autoconnect</item>
+    </string-array>
+    <string-array name="device_values">
+        <item>named</item>
+        <item>CBASS</item>
+        <item>autoconnect</item>
+    </string-array>
+    <!--Graph and monitor update interval -->
+    <string-array name="update_list_labels">
+        <item>1 minute</item>
+        <item>5 minutes</item>
+        <item>15 minutes</item>
+    </string-array>
+    <string-array name="update_values">
+        <item>1</item>
+        <item>5</item>
+        <item>15</item>
+    </string-array>
+    <!--Graph historical values stored -->
+    <string-array name="history_store_labels">
+        <item>1 hour</item>
+        <item>6 hours</item>
+        <item>12 hours</item>
+        <item>24 hours</item>
+    </string-array>
+    <string-array name="history_store_values">
+        <item>60</item>
+        <item>360</item>
+        <item>720</item>
+        <item>1440</item>
+    </string-array>
+    <!--Graph historical values displayed -->
+    <string-array name="history_display_labels">
+        <item>15 minutes</item>
+        <item>1 hour</item>
+        <item>3 hours</item>
+        <item>6 hours</item>
+        <item>12 hours</item>
+        <item>24 hours</item>
+    </string-array>
+    <string-array name="history_display_values">
+        <item>15</item>
+        <item>60</item>
+        <item>180</item>
+        <item>360</item>
+        <item>720</item>
+        <item>1440</item>
+    </string-array>
+
+    <!-- Reply Preference -->
+    <string-array name="reply_entries">
+        <item>Reply</item>
+        <item>Reply to all</item>
+    </string-array>
+
+    <string-array name="reply_values">
+        <item>reply</item>
+        <item>reply_all</item>
+    </string-array>
 </resources>

@@ -1,5 +1,8 @@
 package info.pml.cbass_monitor;
 
+import static android.view.View.GONE;
+import static android.view.View.VISIBLE;
+
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.AlertDialog;
@@ -9,6 +12,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.location.LocationManager;
 import android.os.AsyncTask;
@@ -18,15 +22,21 @@ import android.os.Handler;
 import android.os.Looper;
 import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
+import androidx.fragment.app.FragmentManager;
 import androidx.fragment.app.ListFragment;
+import androidx.preference.PreferenceManager;
 
 import android.util.Log;
+import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.TextView;
 
@@ -42,6 +52,7 @@ public class DevicesFragment extends ListFragment {
     private enum ScanState { NONE, LE_SCAN, DISCOVERY, DISCOVERY_FINISHED }
     private ScanState scanState = ScanState.NONE;
     private static final long LE_SCAN_PERIOD = 10000; // similar to bluetoothAdapter.startDiscovery
+    private int cbassCount = 0; // So we can put non-CBASS named items before unnamed items.
     private final Handler leScanStopHandler = new Handler();
     private final BluetoothAdapter.LeScanCallback leScanCallback;
     private final BroadcastReceiver discoveryBroadcastReceiver;
@@ -49,8 +60,11 @@ public class DevicesFragment extends ListFragment {
 
     private Menu menu;
     private BluetoothAdapter bluetoothAdapter;
-    private final ArrayList<BluetoothDevice> listItems = new ArrayList<>();
+    private final ArrayList<BluetoothDevice> listItems = new ArrayList<BluetoothDevice>();
     private ArrayAdapter<BluetoothDevice> listAdapter;
+
+    // Messing with the UI:
+    ImageView iconView;
 
     public DevicesFragment() {
         leScanCallback = (device, rssi, scanRecord) -> {
@@ -79,6 +93,33 @@ public class DevicesFragment extends ListFragment {
         discoveryIntentFilter.addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED);
     }
 
+    /*
+     * UI.  First use the list fragment layout mentioned in docs to be sure the original
+     * function is the same.  Then add...
+     * Note that doing this disables setEmptyText, so I'll have to make a substitute.
+     */
+    @Override
+    public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+        View view = super.onCreateView(inflater,container,savedInstanceState);
+
+        View ev = inflater.inflate(R.layout.custom_empty_view, container, false);
+        iconView = ev.findViewById(R.id.mpty);
+        //FrameLayout existing= (FrameLayout)view;
+        FrameLayout innerFrame = (FrameLayout)(((FrameLayout)view).getChildAt(1));
+
+
+        // Aargh.  Can't add to vg until it's removed from the useless but required container it comes in.
+        ((LinearLayout)iconView.getParent()).removeView(iconView);
+        innerFrame.addView(iconView );
+
+        return view;
+    }
+
+    public void setMyEmptyText(CharSequence text) {
+        //myEmptyText.setText(text);
+        setEmptyText(text);
+    }
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -89,26 +130,50 @@ public class DevicesFragment extends ListFragment {
             @SuppressLint("MissingPermission")
             @NonNull
             @Override
-            public View getView(int position, View view, @NonNull ViewGroup parent) {
+            public View getView(int position, View convertView, @NonNull ViewGroup parent) {
                 BluetoothDevice device = listItems.get(position);
-                if (view == null)
+                /*
+                This was working, but not perfectly, when the incoming variable was view.
+                if (view == null) {
+                    Log.d(TAG, "getView supplies view, was null");
                     view = getActivity().getLayoutInflater().inflate(R.layout.device_list_item, parent, false);
+                }
+                 */
+                // Try ignoring convertView and just making a fresh View every time.  Docs don't explain the difference.
+                View view = getActivity().getLayoutInflater().inflate(R.layout.device_list_item, parent, false);
+
                 // Returning a null view causes trouble.  Can we make it invisible?
                 // GONE still leaves empty spaces in the list.
                 //if (device.getName() == null || device.getName().isEmpty()) {
                 //    view.setVisibility(View.GONE);
                 //    return view;  // Return now so it doesn't contain the TextViews.
                 //}
+
+                // Preferences determine whether to show non-CBASS devices.
+                SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(getContext());
+                String style = sp.getString("device_style", "named");
                 TextView text1 = view.findViewById(R.id.text1);
                 TextView text2 = view.findViewById(R.id.text2);
+                String dn = device.getName(); // Not used, but make obvious for debugging.
                 if(device.getName() == null || device.getName().isEmpty()) {
+                    // Always hide unnamed devices.
                     //text1.setText("<unnamed>");
                     //text1.setText("");
                     //text2.setText("");
                     //view.setVisibility(View.GONE);
-                    text1.setVisibility(View.GONE);
-                    text2.setVisibility(View.GONE);
+                    Log.d(TAG, "hide nameless at " + position);
+                    text1.setVisibility(GONE);
+                    text2.setVisibility(GONE);
+               } else if (style.equals("CBASS") && !device.getName().contains("CBASS")) {
+                    // If we require CBASS in the name, hide anything else.
+                    Log.d(TAG, "hide NON");
+                    text1.setVisibility(GONE);
+                    text2.setVisibility(GONE);
+                } else if (style.equals("autoconnect") && device.getName().contains("CBASS")) {
+                    Log.d(TAG, "Moving on with first CBASS.  Is not returning okay?");
+                    useThisDevice(device);
                 } else {
+                    Log.d(TAG, "show dev at " + position);
                     text1.setText(device.getName());  // Learn: appending a string appears in device list
                     text2.setText(device.getAddress()); // Originally was outside the if/else
                 }
@@ -123,7 +188,7 @@ public class DevicesFragment extends ListFragment {
         setListAdapter(null);
         View header = getActivity().getLayoutInflater().inflate(R.layout.device_list_header, null, false);
         getListView().addHeaderView(header, null, false);
-        setEmptyText("initializing...");
+        setMyEmptyText("initializing...");
         ((TextView) getListView().getEmptyView()).setTextSize(18);
         setListAdapter(listAdapter);
     }
@@ -146,19 +211,24 @@ public class DevicesFragment extends ListFragment {
         Log.d(TAG, "registering receiver");
         getActivity().registerReceiver(discoveryBroadcastReceiver, discoveryIntentFilter);
         if(bluetoothAdapter == null) {
-            setEmptyText("<bluetooth LE not supported>");
+            setMyEmptyText("<bluetooth LE not supported>");
         } else if(!bluetoothAdapter.isEnabled()) {
-            setEmptyText("<bluetooth is disabled>");
+            setMyEmptyText("<bluetooth is disabled>");
             if (menu != null) {
                 listItems.clear();
                 listAdapter.notifyDataSetChanged();
                 menu.findItem(R.id.ble_scan).setEnabled(false);
             }
         } else {
-            setEmptyText("<Use SCAN to refresh devices>");
+            setMyEmptyText("CBASS Monitor\n\n\n\n\n\n<Use SCAN to find devices>");
             if (menu != null)
                 menu.findItem(R.id.ble_scan).setEnabled(true);
         }
+        // When we back up to this fragment we don't want the decorative image on top of the list.
+        if (!listItems.isEmpty()) {
+            iconView.setVisibility(GONE);
+        }
+
     }
 
     @Override
@@ -227,9 +297,10 @@ public class DevicesFragment extends ListFragment {
             // we fall back to the older API that scans for bluetooth classic _and_ LE
             // sometimes the older API returns less results or slower
         }
+        cbassCount = 0;
         listItems.clear();
         listAdapter.notifyDataSetChanged();
-        setEmptyText("<scanning...>");
+        setMyEmptyText("<scanning...>");
         menu.findItem(R.id.ble_scan).setVisible(false);
         menu.findItem(R.id.ble_scan_stop).setVisible(true);
         if(scanState == ScanState.LE_SCAN) {
@@ -263,27 +334,42 @@ public class DevicesFragment extends ListFragment {
     private void updateScan(BluetoothDevice device) {
         if(scanState == ScanState.NONE) return;
         if(!listItems.contains(device)) {
+            Log.d("DEVICES", "got one ");
+            iconView.setVisibility(GONE);
             // Look at the device names (and UUIDs?) to put CBASS at the top.
             // There seem to be multiple calls per device, so it's best to add non-CBASS
             // devices rather than omit them completely.
             // The original example code had a sort, but it doesn't seem important, and it
             // would make it harder to keep CBASS at the top.
             if (device.getName() != null && device.getName().contains("CBASS")) {
+                Log.d("DEVICES", "Adding CBASS");
+                cbassCount++;
                 listItems.add(0, device);
                 //Collections.sort(listItems, DevicesFragment::compareTo);
-                listAdapter.notifyDataSetChanged();
-            } else {
-                listItems.add(device);
+            } else  {
+                // Lesson: it is a bad idea to filter out unwanted devices here, because
+                // the system keeps trying to add them for a while, possibly prolonging
+                // the scan.  They can be filtered from view in listAdapter getView.
+                // Also try putting unnamed devices last.
+                if (device.getName() == null || device.getName().isEmpty()) {
+                    Log.d("DEVICES", "Adding unnamed");
+                    listItems.add(device);  // Last
+                } else {
+                    Log.d("DEVICES", "Adding non-CBASS");
+                    listItems.add(cbassCount, device);  // After cbass, before unnamed
+                }
                 //Collections.sort(listItems, DevicesFragment::compareTo);
-                listAdapter.notifyDataSetChanged();
             }
+            listAdapter.notifyDataSetChanged();
         }
     }
 
     private void stopScan() {
         if(scanState == ScanState.NONE)
             return;
-        setEmptyText("<no bluetooth devices found>");
+        setMyEmptyText("<no bluetooth devices found>");
+        if (listItems.size() == 0) iconView.setVisibility(VISIBLE);
+
         if(menu != null) {
             menu.findItem(R.id.ble_scan).setVisible(true);
             menu.findItem(R.id.ble_scan_stop).setVisible(false);
@@ -306,12 +392,41 @@ public class DevicesFragment extends ListFragment {
     @Override
     public void onListItemClick(@NonNull ListView l, @NonNull View v, int position, long id) {
         stopScan();
-        BluetoothDevice device = listItems.get(position-1);
+        BluetoothDevice device = listItems.get(position - 1);
+        useThisDevice(device);
+    }
+
+    private void useThisDevice(BluetoothDevice device) {
+        /* creates duplicates?
         Bundle args = new Bundle();
         args.putString("device", device.getAddress());
-        Fragment fragment = new GraphFragment();
+        Fragment fragment = new MonitorFragment();
         fragment.setArguments(args);
-        getParentFragmentManager().beginTransaction().replace(R.id.fragment, fragment, "graph").addToBackStack(null).commit();
+        getParentFragmentManager().beginTransaction().replace(R.id.fragment, fragment, "monitor").addToBackStack(null).commit();
+         */
+
+        Log.d(TAG, "Going to graph with newly chosen device.");
+        Fragment fragment = getParentFragmentManager().findFragmentByTag("MonitorFragment");
+
+        // XXX for debug only:
+        FragmentManager fm = getParentFragmentManager();
+
+        if (fragment == null) {
+            Bundle args = new Bundle();
+            args.putString("device", device.getAddress());
+            fragment = new MonitorFragment();
+            fragment.setArguments(args);
+            getParentFragmentManager()
+                    .beginTransaction()
+                    .replace(R.id.fragment, fragment, "MonitorFragment")
+                    .addToBackStack("MonitorFragment")
+                    .commit();
+        } else {
+            getParentFragmentManager()
+                    .beginTransaction()
+                    .replace(R.id.fragment, fragment, "MonitorFragment")
+                    .commit();
+        }
     }
 
     /**

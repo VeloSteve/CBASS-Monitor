@@ -1,5 +1,8 @@
 package info.pml.cbass_monitor;
 
+import static java.lang.Integer.parseInt;
+import static java.lang.Long.parseLong;
+
 import android.content.ServiceConnection;
 import android.graphics.Color;
 import android.os.Bundle;
@@ -15,7 +18,6 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import java.util.Arrays;
 import java.util.InputMismatchException;
 
 import de.kai_morich.simple_bluetooth_le_terminal.SerialListener;
@@ -25,7 +27,7 @@ public class TestCBASSFragment extends BLEFragment implements ServiceConnection,
 
     private final String TAG = "TestCBASSFragment";
 
-    private String deviceAddress;
+    // private String deviceAddress;
     private Menu menu;
 
     private View logButton;
@@ -38,6 +40,12 @@ public class TestCBASSFragment extends BLEFragment implements ServiceConnection,
     private byte outputRow;
     private final byte generalRow = numTests - 1;
     private TextView receiveText;
+
+    // The log test gets information useful for the other tests.
+    // If running a log test, discard the old data so it's a valid
+    // new tests, but for other tests we can re-use it.
+    private boolean logTestRun = false;
+    private long t0, tMax; // Minutes since 2000
 
     //  use inherited version. private Connected connected = Connected.False;
     private final byte maxRetries = 3;
@@ -64,6 +72,7 @@ public class TestCBASSFragment extends BLEFragment implements ServiceConnection,
     private boolean noMoreOldData = false;
 
     // Imitate a struct with a bare-bones java class.
+    // testType probably belongs inside this class.
     private class TestInfo {
         boolean active;
         long startMillis;
@@ -175,27 +184,37 @@ public class TestCBASSFragment extends BLEFragment implements ServiceConnection,
      */
     private void runCBASSLogTest() {
         // Get the first and last times, byte count, and row size.
-        receiveText.setText("");
+        //receiveText.setText("");
         msgBuffer = "";
         testType = TestType.Log;
         rowResult[outputRow].setBackgroundColor(Color.YELLOW);
         rowResult[outputRow].setText("Test in progress.");
 
         Log.d(TAG, "Sending in runCBASSLogTest");
-        send("r");
+        send("r", ExpectBLEData.Ack);
     }
 
     /**
      * Request a specified set of log lines so the response can be checked.
+     * The argument is the number of lines, negative to work backward.
+     * LogLog (ll) tells whether to start from the beginning, middle, or
+     * end.  Of course some combinations cannot give the number of lines
+     * requested, such as going backward from the start.
      */
     private void runCBASSBatchTest(int lines, LogLoc ll) {
         if (currentTest.active) {
             generalError("Previous test is still running!  Not started.");
             return;
         }
+        // In this case we need values from an earlier test.
+        if (!logTestRun && ll == LogLoc.Middle) {
+            runCBASSLogTest();
+            rowResult[outputRow].setBackgroundColor(Color.CYAN);
+            rowResult[outputRow].setText("Running log test. Please repeat.");
+        }
 
         savedData.clear();  // Start fresh.
-        receiveText.setText("");
+        //receiveText.setText("");
         msgBuffer = "";
         testType = TestType.Lines;
         rowResult[outputRow].setBackgroundColor(Color.YELLOW);
@@ -203,32 +222,43 @@ public class TestCBASSFragment extends BLEFragment implements ServiceConnection,
         // Set the start location in milliseconds.
         // TODO: for Middle, get the actual range first to compute a better value.
         // This will also allow better checks for requests that normally return no lines.
-        // Note: on the Arduino the max values are
-        //        32,767 for int
-        //        65,535 for unsigned int
-        // 2,147,483,647 for long  <--- use this, which is expected on the Arduino side.
-        // 4,294,967,295 for unsigned long
-        long start = Math.min(2147483647, Long.MAX_VALUE);
 
-        if (ll == LogLoc.Start) start = 0;
-        else if (ll == LogLoc.Middle) start = 100000; // Assume at least 100 seconds after Arduino start.
+        // Old code uses milliseconds, but now we have days from a baseline (around 8200) and
+        // minutes from midnight (0-1439)
+        // For end:
+        int startD = 20000; // about 2054
+        int startM = 1439;
+        if (ll == LogLoc.Start) { startD = 7000; startM = 0; } // About 2019
+        else if (ll == LogLoc.Middle) {
+            /*
+            if (d0 == dMax && t0 == tMax) {
+                startD = d0; startM = t0;
+            } else if (d0 == dMax) {
+                startD = d0;
+                startM = (int) (t0 + tMax)/2;
+            } else {
+                long st = (d0*1440 + t0 + dMax*1440 + tMax) / 2;
+                startD = (int) (st / 1440);
+                startM = (int) (st % 1440);
+            }
+             */
+        }
 
         // Save test information for use when checking the result:
         currentTest.active = true;
-        currentTest.startMillis = start;
         currentTest.linesRequested = Math.abs(lines);
         currentTest.linesExpected = currentTest.linesRequested;
         currentTest.forward = lines > 0;
         currentTest.logLoc = ll;
         currentTest.linesReturned = 0;
 
-        // This is only some of the cases where we may expect fewer than requested lines.
+        // These are only some of the cases where we may expect fewer than requested lines.
         if (ll == LogLoc.Start && !currentTest.forward) currentTest.linesExpected = 0;
         if (ll == LogLoc.End && currentTest.forward) currentTest.linesExpected = 0;
 
 
         Log.d(TAG, "Sending in runCBASSLogTest");
-        send("b," + lines + "," + start);
+        send("b," + lines + "," + startD + "," + startM, ExpectBLEData.Batch);
     }
 
     @Override
@@ -260,6 +290,8 @@ public class TestCBASSFragment extends BLEFragment implements ServiceConnection,
 
         receiveText.append(msg);
         if (testType == TestType.Log) {
+            // Note that this test was initially failing on the CBASS-R version, but after
+            // deleting the GRAPHPTS.TXT file and restarting it was okay.
             msgBuffer = msgBuffer + msg;
             // If the message is complete, check results.  Otherwise, just exit until more arrives.
             if (msgBuffer.endsWith(",D")) {
@@ -270,26 +302,29 @@ public class TestCBASSFragment extends BLEFragment implements ServiceConnection,
                     rowResult[outputRow].setBackgroundColor(Color.RED);
                     return;
                 }
-                long t0 = Long.parseLong(parts[0]);
-                long tMax = Long.parseLong(parts[1]);
-                int byteCount = Integer.parseInt(parts[2]);
-                int lineSize = Integer.parseInt(parts[3]);
+                // For these 2 use class variables so they can be referenced by other tests.
+                t0 = parseLong(parts[0]);
+                tMax = parseLong(parts[1]);
+                int byteCount = parseInt(parts[2]);
+                int lineSize = parseInt(parts[3]);
                 rowLabel[outputRow].setText("File and timestamps");
                 rowResult[outputRow].setBackgroundColor(Color.GREEN);
 
                 rowResult[outputRow].setText("");
-                boolean okay = myAssert(t0 < 20000, "t0 too large: " + t0, rowResult[outputRow]);
-                okay = okay && myAssert(t0 < tMax, "tMax " + tMax + " <= t0: " + t0, rowResult[outputRow]);
+                // Typical time 0708099300
+                boolean okay = myAssert(t0 > 708000000, "t0 too small: " + t0, rowResult[outputRow]);
+                okay = okay && myAssert(t0 < 708000000+2*365*24*3600, "t0 too large: " + t0, rowResult[outputRow]);
                 okay = okay && myAssert(byteCount % lineSize == 0, " File size " + byteCount + " is not a multiple of line size " + lineSize, rowResult[outputRow]);
-                okay = okay && myAssert(tMax > 10000, " tMax too small: " + tMax, rowResult[outputRow]);
                 if (okay) rowResult[outputRow].setText("PASS");
                 testType = TestType.Nothing;
+                currentTest.reset();
                 msgBuffer = "";
+                logTestRun = true;
             }
         } else if (testType == TestType.Lines) {
             msgBuffer = msgBuffer + msg;
             // If the message is complete, check results.  Otherwise, just exit until more arrives.
-            if (msgBuffer.endsWith(",BatchDone")) {
+            if (msgBuffer.endsWith("BatchDone")) {
                 receiveText.append("\n");
                 // This just puts the results into savedData.
                 int lineCount = parseBatch(msgBuffer);
@@ -318,13 +353,16 @@ public class TestCBASSFragment extends BLEFragment implements ServiceConnection,
                         rr.append(" No data, as expected");
                     }
                 }
-
+                // Whether the test succeeds or not, reset state so another request/response won't
+                // be blocked.
                 testType = TestType.Nothing;
                 msgBuffer = "";
-                currentTest.reset();
+                currentTest.reset();  // This sets active to false (and resets other things).
             }
         } else {
             generalError("response when none was expected");
+            currentTest.reset();
+            testType = TestType.Nothing;
         }
 
     }
@@ -362,30 +400,35 @@ public class TestCBASSFragment extends BLEFragment implements ServiceConnection,
      */
     private int parseBatch(String buf) {
 
-        int timeLen = 8;    // One 8-character long
-        int tSetLen = 4*5;  // Four 4-character times with commas
-        String[] parts;
+        // A typical input is
+        // T08188,0816,22.1,22.1,22.1,21.8,30.0,30.0,30.0,30.0
+        // But prototype code may omit the first zero.
+        // Also note that we may switch to seconds rather than minutes in the second
+        // position, requiring one more digit.
+        // For now, assume that we need at least
+        final int lineLen = 5+5+5*8-1;
         int count = 0;
+        String[] points;
 
-        // Each point starts with T.
-        while (buf.length() > 0 && !buf.startsWith(("BatchDone"))) {
-            Log.d("PARSE", buf);
-            if (!buf.startsWith("T")) {
-                throw new InputMismatchException("Batch must start with a T.");
-            } else if (buf.length() < timeLen + 2 * tSetLen + 2) {
-                throw new InputMismatchException("Not enough data in buffer for a graph point. >" + buf + "<");
-            }
-            TempPoint incomingPoint = new TempPoint(buf.substring(1, timeLen + 1));  // substring is inclusive/exclusive
-            buf = buf.substring(timeLen + 2);  // drop T12345678,
-
-            parts = buf.split(",", 5);  // 4 temps and leftovers
-            incomingPoint.setMeasured(Arrays.copyOfRange(parts, 0, 4));
-            buf = buf.substring(tSetLen);
-
-            parts = buf.split(",", 5);  // 4 temps and leftovers
-            incomingPoint.setTarget(Arrays.copyOfRange(parts, 0, 4));
-            buf = buf.substring(tSetLen);
-
+        // Check some basic requirements.
+        Log.d("PARSE", "Full input: " + buf);
+        if (!buf.startsWith("T")) {
+            throw new InputMismatchException("Batch must start with a T.");
+        } else if (buf.length() < lineLen) {
+            throw new InputMismatchException("Not enough data in buffer for a graph point. >" + buf + "<");
+        }
+        if (!buf.endsWith("BatchDone")) {
+            throw new InputMismatchException("Batch must end with BatchDone.");
+        }
+        // Remove the leading T and trailing BatchDone.
+        buf = buf.substring(1, buf.indexOf("B"));
+        // Parse out the individual time points, but let TempPoint parse the time and temperatures.
+        points = buf.split("T", 0);
+        Log.d("PARSE", "Building " + points.length + " points.");
+        for (String p: points) {
+            // Let TempPoint do the remaining parsing so the code is the same here and in GraphFragment
+            Log.d("PARSE", "Single line: " + p);
+            TempPoint incomingPoint = new TempPoint(p);  // substring is inclusive/exclusive
             count++;
             if (addToEnd) {
                 Log.d("PARSE", "Saving point at end " + incomingPoint);
