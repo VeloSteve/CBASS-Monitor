@@ -10,7 +10,7 @@ import androidx.appcompat.widget.Toolbar;
 
 public class MainActivity extends AppCompatActivity implements FragmentManager.OnBackStackChangedListener {
     public Toolbar toolbar;
-    private final String TAG = "MainActivity";
+    private final String TAG = "MyMain";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -48,12 +48,14 @@ public class MainActivity extends AppCompatActivity implements FragmentManager.O
         int count = fm.getBackStackEntryCount();
 
         if (count == 0) {
-            Log.d(TAG, "Calling super.onBackPressed");
+            Log.d(TAG, "Calling super.onBackPressed, count 0");
             super.onBackPressed();
-        } else if (count == 1 && fm.findFragmentByTag("DevicesFragment") != null) {
+        } else //noinspection StatementWithEmptyBody
+            if (count == 1 && fm.findFragmentByTag("DevicesFragment") != null) {
             // do nothing - this is the start fragment
+            // calling super just goes to a blank screen.
         } else {
-            Log.d(TAG, "Popping back stack w/o calling super.");
+            Log.d(TAG, "Popping back stack w/o calling super. count = " + count);
             fm.popBackStack();
         }
     }

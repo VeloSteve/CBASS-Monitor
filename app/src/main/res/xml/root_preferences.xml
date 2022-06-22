@@ -20,7 +20,7 @@
     <PreferenceCategory app:title="Panels">
         <SwitchPreferenceCompat
             app:key="testPanel"
-            app:defaultValue="true"
+            app:defaultValue="false"
             app:title="Test Functions" />
 
     </PreferenceCategory>

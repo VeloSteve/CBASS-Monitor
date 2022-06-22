@@ -2,6 +2,7 @@ package info.pml.cbass_monitor;
 
 import static java.lang.Integer.parseInt;
 import static java.lang.Long.parseLong;
+import static java.lang.Math.min;
 
 import android.content.ServiceConnection;
 import android.graphics.Color;
@@ -14,10 +15,12 @@ import android.view.MenuInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import java.util.Collections;
 import java.util.InputMismatchException;
 
 import de.kai_morich.simple_bluetooth_le_terminal.SerialListener;
@@ -27,32 +30,21 @@ public class TestCBASSFragment extends BLEFragment implements ServiceConnection,
 
     private final String TAG = "TestCBASSFragment";
 
-    // private String deviceAddress;
-    private Menu menu;
-
     private View logButton;
     private View f3Button;
     private View l3Button;
 
     private final int numTests = 4;
-    private TextView[] rowLabel = new TextView[numTests];
-    private TextView[] rowResult = new TextView[numTests];
+    private final TextView[] rowLabel = new TextView[numTests];
+    private final TextView[] rowResult = new TextView[numTests];
     private byte outputRow;
-    private final byte generalRow = numTests - 1;
     private TextView receiveText;
 
     // The log test gets information useful for the other tests.
     // If running a log test, discard the old data so it's a valid
     // new tests, but for other tests we can re-use it.
     private boolean logTestRun = false;
-    private long t0, tMax; // Minutes since 2000
 
-    //  use inherited version. private Connected connected = Connected.False;
-    private final byte maxRetries = 3;
-    private byte connectRetries = maxRetries;
-    private boolean initialStart = true;
-    private boolean pendingNewline = false;
-    private String newline = TextUtil.newline_crlf;
 
     private String msgBuffer = "";
 
@@ -73,7 +65,7 @@ public class TestCBASSFragment extends BLEFragment implements ServiceConnection,
 
     // Imitate a struct with a bare-bones java class.
     // testType probably belongs inside this class.
-    private class TestInfo {
+    private static class TestInfo {
         boolean active;
         long startMillis;
         int linesRequested;
@@ -93,8 +85,6 @@ public class TestCBASSFragment extends BLEFragment implements ServiceConnection,
         }
     }
     TestInfo currentTest = new TestInfo();
-
-
 
     // Set up parameters for the data to show in a default graph.  After this works,
     // make a set of optional graphs.  For example, last 15 minutes in detail, full run to now, and full run including future plan.
@@ -222,13 +212,11 @@ public class TestCBASSFragment extends BLEFragment implements ServiceConnection,
         // Set the start location in milliseconds.
         // TODO: for Middle, get the actual range first to compute a better value.
         // This will also allow better checks for requests that normally return no lines.
+        // Time is seconds from 2000, about 0708099300 as this is written.
 
-        // Old code uses milliseconds, but now we have days from a baseline (around 8200) and
-        // minutes from midnight (0-1439)
         // For end:
-        int startD = 20000; // about 2054
-        int startM = 1439;
-        if (ll == LogLoc.Start) { startD = 7000; startM = 0; } // About 2019
+        long start = 708099300 + 10*365*24*3600; // about 2032
+        if (ll == LogLoc.Start) { start = 608099300; } // well in the past
         else if (ll == LogLoc.Middle) {
             /*
             if (d0 == dMax && t0 == tMax) {
@@ -258,13 +246,12 @@ public class TestCBASSFragment extends BLEFragment implements ServiceConnection,
 
 
         Log.d(TAG, "Sending in runCBASSLogTest");
-        send("b," + lines + "," + startD + "," + startM, ExpectBLEData.Batch);
+        send("b," + lines + "," + start, ExpectBLEData.Batch);
     }
 
     @Override
     public void onCreateOptionsMenu(@NonNull Menu menu, MenuInflater inflater) {
         super.onCreateOptionsMenu(menu, inflater);
-        this.menu = menu;
         // Hide this fragment's own icon.
         menu.findItem(R.id.CBASS_tests).setVisible(false);
 
@@ -273,17 +260,17 @@ public class TestCBASSFragment extends BLEFragment implements ServiceConnection,
 
     @Override
     void receive(byte[] data) {
-
+        long t0, tMax; // Minutes since 2000
         String msg = new String(data);
         if (msg.startsWith("Coll")) {
             receiveText.append("Who sets " + msg + "?");
         }
         String[] parts;
+        //  use inherited version. private Connected connected = Connected.False;
+        String newline = TextUtil.newline_crlf;
         if(newline.equals(TextUtil.newline_crlf) && msg.length() > 0) {
             // don't show CR as ^M if directly before LF
             msg = msg.replace(TextUtil.newline_crlf, TextUtil.newline_lf);
-
-            pendingNewline = msg.charAt(msg.length() - 1) == '\r';
         }
 
         rowResult[outputRow].setBackgroundColor(Color.LTGRAY);
@@ -328,6 +315,7 @@ public class TestCBASSFragment extends BLEFragment implements ServiceConnection,
                 receiveText.append("\n");
                 // This just puts the results into savedData.
                 int lineCount = parseBatch(msgBuffer);
+                Collections.sort(savedData);  // The LineGraphSeries must be built in ascending order.
 
                 /* Typical starting values:
                 currentTest.active = true;
@@ -347,11 +335,14 @@ public class TestCBASSFragment extends BLEFragment implements ServiceConnection,
 
                 if (okay) {
                     rr.setText("PASS");
+                    rr.setBackgroundColor(Color.GREEN);
                     if (lineCount > 0) {
                         rr.append(" times from " + savedData.getFirstTime() + " to " + savedData.getLastTime());
                     } else {
                         rr.append(" No data, as expected");
                     }
+                } else {
+                    rr.setBackgroundColor(Color.RED);
                 }
                 // Whether the test succeeds or not, reset state so another request/response won't
                 // be blocked.
@@ -379,36 +370,37 @@ public class TestCBASSFragment extends BLEFragment implements ServiceConnection,
         return okay;
     }
 
+    /*
+     * Errors not tied to a specific test go in a special row.
+     */
     void generalError(String t) {
         receiveText.append(" ERROR: " + t);
-        rowResult[generalRow].setText("ERROR: " + t);
-        rowResult[generalRow].setBackgroundColor(Color.RED);
+        rowResult[numTests-1].setText("ERROR: " + t);
+        rowResult[numTests-1].setBackgroundColor(Color.RED);
     }
 
 
     /**
-     * The input should be a complete batch of data suitable for graphing, consisting of lines
-     * looking like.
-     * T00012345,M12.0,13.0,14.0,15.0,P10.0,15.0,20.0,25.0,
-     * There T -> time in milliseconds, M -> measured temperatures, P -> planned temperatures
+     * NOTE: this should be the same code used in GraphFragment.  For better testing it would be
+     * literally the same code from a shared class, but for now this is a copy.
      *
-     * This will parse out the values, build TempPoints and append them to TemperatureData (tempData).
+     * The input should be a complete batch of data to be graphed, consisting of lines
+     * looking like.
+     * T0709201449,22.3,21.7,21.9,21.6,30.0,30.0,30.0,30.0
+     * There T -> time in seconds since 1970, next 4 -> measured temperatures, last 4 -> planned temperatures
+     * They are received at this point without linefeeds, so "T" is the delimiter.
+     *
+     * This will parse out the lines, build TempPoints and append them to TemperatureData (tempData).
      *
      * Note that there has been no attempt to reduce data copying or memory use, on the assumption
      * that this is fast compared to BLE data transfer.  Check that assumption some time!
      * @param buf  All data received from the last BLE receipt.
      */
     private int parseBatch(String buf) {
-
-        // A typical input is
-        // T08188,0816,22.1,22.1,22.1,21.8,30.0,30.0,30.0,30.0
-        // But prototype code may omit the first zero.
-        // Also note that we may switch to seconds rather than minutes in the second
-        // position, requiring one more digit.
-        // For now, assume that we need at least
+        boolean usingDummy = false;
         final int lineLen = 5+5+5*8-1;
-        int count = 0;
         String[] points;
+        int count = 0;
 
         // Check some basic requirements.
         Log.d("PARSE", "Full input: " + buf);
@@ -420,26 +412,50 @@ public class TestCBASSFragment extends BLEFragment implements ServiceConnection,
         if (!buf.endsWith("BatchDone")) {
             throw new InputMismatchException("Batch must end with BatchDone.");
         }
-        // Remove the leading T and trailing BatchDone.
-        buf = buf.substring(1, buf.indexOf("B"));
+        // Remove the leading T and trailing BatchDone  There may also be an "AT+BLEUARTTX=".
+        if (buf.indexOf("AT") > 0) {
+            buf = buf.substring(1, min(buf.indexOf("B"), buf.indexOf("AT")));
+        } else {
+            buf = buf.substring(1, buf.indexOf("B"));
+        }
+        Log.d("PARSE", "Input substring: " + buf);
         // Parse out the individual time points, but let TempPoint parse the time and temperatures.
         points = buf.split("T", 0);
         Log.d("PARSE", "Building " + points.length + " points.");
+        if (usingDummy && !(points.length == 0)) {
+            // New CBASS data must replace old "dummy" data from startup.
+            savedData.clear();
+            usingDummy = false;
+        }
         for (String p: points) {
             // Let TempPoint do the remaining parsing so the code is the same here and in GraphFragment
             Log.d("PARSE", "Single line: " + p);
-            TempPoint incomingPoint = new TempPoint(p);  // substring is inclusive/exclusive
-            count++;
-            if (addToEnd) {
-                Log.d("PARSE", "Saving point at end " + incomingPoint);
-                savedData.add(incomingPoint);
+            if (p.length() < GraphFragment.bytesPerReturnedLine) {
+                Log.w("PARSE", "Skipping a short temperature log line.");
             } else {
-                Log.d("PARSE", "Saving point at start " + incomingPoint);
+                TempPoint incomingPoint = new TempPoint(p);  // substring is inclusive/exclusive
+                count++;
+                if (addToEnd) {
+                    Log.d("PARSE", "Saving point at end " + incomingPoint);
+                    savedData.add(incomingPoint);
+                } else {
+                    Log.d("PARSE", "Saving point at start " + incomingPoint);
 
-                // Could be slow - if so save up incoming batches and do a single add/sort per batch.
-                savedData.add(0, incomingPoint);
+                    // Could be slow - if so save up incoming batches and do a single add/sort per batch.
+                    savedData.add(0, incomingPoint);
+                }
             }
         }
+        /* Not for these tests:
+        // If more data is stored than we want to allow, delete the oldest points.
+        // Assumes that maxHistory doesn't change (in preferences) between a request and response.
+        int rem = savedData.trimRange(maxHistory);
+        // If points were deleted the next request should look forward in time.
+        if (rem > 0) noMoreOldData = true;  // no need to set addToEnd, which is set at each new request.
+
+        Toast.makeText(getActivity(), savedData.size() + " points, " + count + " added, " + rem + " removed.", Toast.LENGTH_LONG).show();
+        Log.d(TAG, savedData.size() + " points, " + count + " added, " + rem + " removed.");
+         */
         return count;
     }
 

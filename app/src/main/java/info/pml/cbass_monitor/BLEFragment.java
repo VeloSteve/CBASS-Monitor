@@ -8,6 +8,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.content.SharedPreferences;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.os.IBinder;
@@ -23,15 +24,14 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 import android.widget.Toast;
-import android.widget.Toolbar;
 
-import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.drawable.DrawableCompat;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
+import androidx.preference.PreferenceManager;
 
 import java.util.Timer;
 import java.util.TimerTask;
@@ -50,6 +50,9 @@ import de.kai_morich.simple_bluetooth_le_terminal.TextUtil;
 public class BLEFragment extends Fragment implements ServiceConnection, SerialListener {
 
     private final String TAG = "BLEFragment";
+
+    SharedPreferences sharedPreferences;  // Used by GraphFragment and to set test icon.
+
 
     enum Connected {False, Pending, True}
 
@@ -85,7 +88,6 @@ public class BLEFragment extends Fragment implements ServiceConnection, SerialLi
 
     Timer connCheckTimer; // For noticing when the connection is dropped.
 
-
     /*
      * Lifecycle
      *    Not all calls are documented at https://developer.android.com/guide/fragments/lifecycle
@@ -96,7 +98,6 @@ public class BLEFragment extends Fragment implements ServiceConnection, SerialLi
     @Override
     public void onAttach(@NonNull Activity activity) {
         super.onAttach(activity);
-        Log.d(TAG, "Binding in onAttach.");
         getActivity().bindService(new Intent(getActivity(), SerialService.class), this, Context.BIND_AUTO_CREATE);
     }
 
@@ -106,11 +107,15 @@ public class BLEFragment extends Fragment implements ServiceConnection, SerialLi
         setHasOptionsMenu(true);
         // Not recommended in most situations, but we need it for keeping the service connection.
         setRetainInstance(true);
-        // TODO: exit if deviceAddress is null?
-        // Maybe getActivity().getParentFragmentManager().beginTransaction().remove(this).commit();
         deviceAddress = getArguments().getString("device");
-
-
+        if (deviceAddress == null) {
+            // This never happens (it seems), but there's no point in going on without an address.
+            Toast.makeText(getActivity(), "No device address.  Try again.", Toast.LENGTH_LONG).show();
+            getParentFragmentManager().popBackStack();
+        }
+        // Some options are stored as preferences.  Get the reference here, but
+        // check values as they are needed.
+        sharedPreferences = PreferenceManager.getDefaultSharedPreferences(getContext());
     }
 
     /*
@@ -120,8 +125,6 @@ public class BLEFragment extends Fragment implements ServiceConnection, SerialLi
     public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_ble, container, false);
         diagnostics = view.findViewById(R.id.diagnostics);
-        //Log.d(TAG, "Toolbar found? " + (toolbar != null));
-        // Button Actions (what to send)
 
         return view;
     }
@@ -129,7 +132,6 @@ public class BLEFragment extends Fragment implements ServiceConnection, SerialLi
     @Override
     public void onStart() {
         super.onStart();
-        Log.d(TAG, "in onStart");
     }
 
     /**
@@ -169,7 +171,6 @@ public class BLEFragment extends Fragment implements ServiceConnection, SerialLi
     public void onCreateOptionsMenu(@NonNull Menu menu, MenuInflater inflater) {
         super.onCreateOptionsMenu(menu, inflater);
         inflater.inflate(R.menu.menu_ble_shared, menu);
-        Log.d(TAG, "in onCreateOptionsMenu");
         this.menu = menu;
         // This method is not documented on the Fragment lifecycle page.
         // Originally checked for bleStatus of null, be it seems that we need a fresh copy
@@ -180,6 +181,11 @@ public class BLEFragment extends Fragment implements ServiceConnection, SerialLi
         bleStatus = menu.findItem(R.id.ble_status);
         // Do we need to update even if new?  Probably.  else
         updateButtons();  // An existing button seems to lose its Tint.  Re-color it.
+
+        // The test panel is optional.  Toggle the icon.
+        menu.findItem(R.id.CBASS_tests)
+            .setVisible(sharedPreferences.getBoolean("testPanel", false));
+
     }
 
     @Override
@@ -216,7 +222,6 @@ public class BLEFragment extends Fragment implements ServiceConnection, SerialLi
 
     @Override
     public void onDetach() {
-        Log.d(TAG, "UNBinding in onDetach.");
         try {
             getActivity().unbindService(this);
         } catch (Exception ignored) {
@@ -227,12 +232,11 @@ public class BLEFragment extends Fragment implements ServiceConnection, SerialLi
     /*
      * End Lifecycle as documented in Fragment.
      *
-     * Begin calls related to connecting and disonnecting to the service or a BLE device.
+     * Begin calls related to connecting and disconnecting to the service or a BLE device.
      */
 
     @Override
     public void onServiceConnected(ComponentName name, IBinder binder) {
-        Log.d(TAG, "Getting service from binder in onServiceConnected.");
         service = ((SerialService.SerialBinder) binder).getService();
         service.attach(this);
         if (initialStart && isResumed()) {
@@ -243,7 +247,6 @@ public class BLEFragment extends Fragment implements ServiceConnection, SerialLi
 
     @Override
     public void onServiceDisconnected(ComponentName name) {
-        Log.d(TAG, "Setting service null in onServiceDisconnected.");
         service = null;
     }
 
@@ -258,54 +261,43 @@ public class BLEFragment extends Fragment implements ServiceConnection, SerialLi
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         int id = item.getItemId();
-        // TODO use switch/case instead of if.
-        if (id == R.id.ble_status) {
-            if (connected == Connected.False) {
-                Toast.makeText(getActivity(), "Trying to reconnect.", Toast.LENGTH_SHORT).show();
-                connect();
-            } else {
-                // TODO: Connected may be true when icon shows false.  It's a bug elsewhere, but see if
-                // we can just fix the icon.
+        switch (id) {
+            case R.id.ble_status:
 
-                Toast.makeText(getActivity(), "You may select a new CBASS.", Toast.LENGTH_LONG).show();
-                // If we don't disconnect, a new scan won't show the existing CBASS.
-                disconnect();
-                switchTo("DevicesFragment");
-                /*
-                Fragment fragment = new DevicesFragment();
-                getParentFragmentManager().beginTransaction().replace(R.id.fragment, fragment, "DevicesFragment").addToBackStack(null).commit();
-                 */
-            }
-            return true;
-        } else if (id == R.id.monitor) {
-            switchTo("MonitorFragment");
-            return true;
-        } else if (id == R.id.graph) {
-            switchTo("GraphFragment");
-            return true;
-        } else if (id == R.id.CBASS_tests) {
-            switchTo("TestCBASSFragment");
-            return true;
-        } else if (id == R.id.to_settings) {
-            switchTo("AppSettingsFragment");
-            return true;
-        } else if (id == R.id.to_control) {
-            switchTo("CBASSControlFragment");
-            return true;
-        } else {
-            return super.onOptionsItemSelected(item);
+                if (connected == Connected.False) {
+                    Toast.makeText(getActivity(), "Trying to reconnect.", Toast.LENGTH_SHORT).show();
+                    connect();
+                } else {
+                    // TODO: Connected may be true when icon shows false.  It's a bug elsewhere, but see if
+                    // we can just fix the icon.
+                    Toast.makeText(getActivity(), "You may select a new CBASS.", Toast.LENGTH_LONG).show();
+                    // If we don't disconnect, a new scan won't show the existing CBASS.
+                    disconnect();
+                    switchTo("DevicesFragment");
+                }
+                return true;
+            case R.id.monitor:
+                switchTo("MonitorFragment"); return true;
+            case R.id.graph:
+                switchTo("GraphFragment"); return true;
+            case R.id.CBASS_tests:
+                switchTo("TestCBASSFragment"); return true;
+            case R.id.to_settings:
+                switchTo("AppSettingsFragment"); return true;
+            case R.id.to_control:
+                switchTo("CBASSControlFragment"); return true;
+            default:
+                return super.onOptionsItemSelected(item);
         }
     }
 
     void switchTo(String fragName) {
-        Log.d(TAG, "Switching to fragment " + fragName);
-
         // Just for debug, not used:
         FragmentManager fm = getParentFragmentManager();
 
-
         Fragment fragment = getParentFragmentManager().findFragmentByTag(fragName);
         if (fragment == null) {
+            Log.d(TAG, "Switching to NEW fragment " + fragName + " existing backstack has " + fm.getBackStackEntryCount());
             Bundle args = new Bundle();
             args.putString("device", deviceAddress);
             try {
@@ -324,6 +316,7 @@ public class BLEFragment extends Fragment implements ServiceConnection, SerialLi
                     .addToBackStack(fragName)  // was null
                     .commit();
         } else {
+            Log.d(TAG, "Switching to EXISTING fragment " + fragName + " existing backstack has " + fm.getBackStackEntryCount());
             getParentFragmentManager()
                     .beginTransaction()
                     .replace(R.id.fragment, fragment, fragName)
@@ -337,8 +330,6 @@ public class BLEFragment extends Fragment implements ServiceConnection, SerialLi
      */
     @SuppressLint("MissingPermission")
     void connect() {
-        Log.d(TAG, "In connect()");
-        // Try this - if we already have a connected service, just return.
 
         try {
             BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
@@ -349,12 +340,10 @@ public class BLEFragment extends Fragment implements ServiceConnection, SerialLi
                 ((AppCompatActivity) getActivity()).getSupportActionBar().setTitle(deviceName);
             }
             if (!service.isConnected()) {
-                Log.d(TAG, "In connect, connecting service.");
                 connected = Connected.Pending;
                 SerialSocket socket = new SerialSocket(getActivity().getApplicationContext(), device);
                 service.connect(socket);
             } else {
-                Log.d(TAG, "In connect, service already connected.");
                 connected = Connected.True;
             }
         } catch (Exception e) {
@@ -362,11 +351,9 @@ public class BLEFragment extends Fragment implements ServiceConnection, SerialLi
             e.printStackTrace();
             onSerialConnectError(e);
         }
-        Log.d(TAG, "Leaving connect()");
     }
 
     private void disconnect() {
-        Log.d(TAG, "In disconnect");
         connected = Connected.False;
         // This was working well without the null check until
         // an "extra" connect call failed and had a Fatal exception
@@ -406,7 +393,7 @@ public class BLEFragment extends Fragment implements ServiceConnection, SerialLi
                 Log.d(TAG, "wait 500ms for previous send to return");
                 Thread.sleep(500);  // 5 seconds in 10 tries.
             } catch (InterruptedException e) {
-                Log.d(TAG, "Interruped during wait for previous command. Not sending " + str);
+                Log.d(TAG, "Interrupted during wait for previous command. Not sending " + str);
                 e.printStackTrace();
                 return;
             }
@@ -458,7 +445,6 @@ public class BLEFragment extends Fragment implements ServiceConnection, SerialLi
     @Override
     public void onSerialConnect() {
         connected = Connected.True;
-        Log.d(TAG, "connected set True in onSerialConnect");
         updateButtons(true);
         startUpdateTimer();
     }
@@ -477,7 +463,6 @@ public class BLEFragment extends Fragment implements ServiceConnection, SerialLi
         TimerTask monTask = new TimerTask() {
             @Override
             public void run() {
-                Log.d(TAG, "=================== TimerTask updating buttons.");
                 updateButtons();
             }
         };
@@ -498,8 +483,6 @@ public class BLEFragment extends Fragment implements ServiceConnection, SerialLi
     public void onSerialConnectError(Exception e) {
         disconnect();
         updateButtons(false);
-
-
     }
 
     @Override
@@ -536,7 +519,7 @@ public class BLEFragment extends Fragment implements ServiceConnection, SerialLi
      * @param isConnected
      */
     void updateButtons(boolean isConnected) {
-        Log.d(TAG, "Updating top icons for BLE status. " + isConnected);
+        // Log.d(TAG, "Updating top icons for BLE status. " + isConnected);
         if (bleStatus == null || bleStatus.getIcon() == null) {
             // Not ready - just exit for now.
             Log.d(TAG, "-- no bleStatus icon to update --");
@@ -546,35 +529,16 @@ public class BLEFragment extends Fragment implements ServiceConnection, SerialLi
         Drawable wd = DrawableCompat.wrap(nd);
         if (isConnected) {
             DrawableCompat.setTint(wd, getContext().getResources().getColor(android.R.color.holo_blue_bright));
-            Log.d(TAG, "-- BLUE --");
+            //Log.d(TAG, "-- BLUE --");
         } else {
             // Multiple ifs for debugging only...
             if (getContext() != null) {
                 if (getContext().getResources() != null) {
                     DrawableCompat.setTint(wd, getContext().getResources().getColor(android.R.color.holo_orange_dark));
-                    Log.d(TAG, "-- ORANGE --");
+                    //Log.d(TAG, "-- ORANGE --");
                 }
             }
         }
-        // Sometimes we get color, sometimes not.  See if this helps:
-        // menu isn't always owned by the current view.  Can we go direct to the icon?
-        // menu.findItem(R.id.ble_status).setIcon(wd);
-        // but this version doesn't keep the color updated!
-
-        /* XXX  turn off while debugging disappearance of UI after 2nd fragment switch!
-        This WAS the problem.  There must be another way.
-        try {
-            bleStatus.setIcon(wd);
-        } catch (Exception e) {
-            Log.w(TAG, "Icon color setting called from wrong thread. Trying UI thread.");
-            requireActivity().runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    bleStatus.setIcon(wd);
-                }
-            });
-        }
-         */
     }
 
 }

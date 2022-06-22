@@ -65,7 +65,7 @@ public class GraphFragment extends BLEFragment implements ServiceConnection {
     private final int fillDataMillis = 60000;  // 1/minute is planned, debugging w/ 10 seconds, 5 updates.
 
     // We can re-use the preferences object, but must get the values at the time of use in case of changes.
-    SharedPreferences sharedPreferences;
+    // use the inherited one. SharedPreferences sharedPreferences;
     int oldMaxHistory = 0;  // So we can check backward if the maximum history value increases.
     int maxHistory = 0;  // So we can check backward if the maximum history value increases.
     Timer monTimer;  // For repeated calls for data
@@ -75,7 +75,7 @@ public class GraphFragment extends BLEFragment implements ServiceConnection {
     // Set up parameters for the data to show in a default graph.  After this works,
     // make a set of optional graphs.  For example, last 15 minutes in detail, full run to now, and full run including future plan.
     private TemperatureData savedData;
-    private final int bytesPerReturnedLine = 50;
+    static final int bytesPerReturnedLine = 50;
     // Data as used by the graph.
     private LineGraphSeries<DataPoint>[] graphData = new LineGraphSeries[8];
     private GraphView graph;
@@ -99,16 +99,8 @@ public class GraphFragment extends BLEFragment implements ServiceConnection {
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setHasOptionsMenu(true);
-        // Best practice seems to be NOT to use the next line, at least unless there are AsyncTasks.
-        // setRetainInstance(true); // When true onCreate is only called once.
-        // TODO: exit if deviceAddress is null?
-        // Maybe getActivity().getParentFragmentManager().beginTransaction().remove(this).commit();
-        deviceAddress = getArguments().getString("device");
 
-        // Some graphing options are stored as preferences.  Get the reference here, but
-        // check values as they are needed.
-        sharedPreferences = PreferenceManager.getDefaultSharedPreferences(getContext());
+
     }
 
     @Override
@@ -426,19 +418,18 @@ public class GraphFragment extends BLEFragment implements ServiceConnection {
     /**
      * The input should be a complete batch of data to be graphed, consisting of lines
      * looking like.
-     * T00012345,M12.0,13.0,14.0,15.0,P10.0,15.0,20.0,25.0,
-     * There T -> time in milliseconds, M -> measured temperatures, P -> planned temperatures
+     * T0709201449,22.3,21.7,21.9,21.6,30.0,30.0,30.0,30.0
+     * There T -> time in seconds since 1970, next 4 -> measured temperatures, last 4 -> planned temperatures
+     * They are received at this point without linefeeds, so "T" is the delimiter.
      *
-     * This will parse out the values, build TempPoints and append them to TemperatureData (tempData).
+     * This will parse out the lines, build TempPoints and append them to TemperatureData (tempData).
      *
      * Note that there has been no attempt to reduce data copying or memory use, on the assumption
      * that this is fast compared to BLE data transfer.  Check that assumption some time!
      * @param buf  All data received from the last BLE receipt.
      */
     private int parseBatch(String buf) {
-
         final int lineLen = 5+5+5*8-1;
-
         String[] points;
         int count = 0;
 
@@ -667,7 +658,7 @@ public class GraphFragment extends BLEFragment implements ServiceConnection {
         for (int j = 0; j < sample; j++) {
             tp = new TempPoint(secs, t, t+1, t+2, t+3, t, t-1, t-2, t-3);
             savedData.add(tp);
-            secs = secs + 20*60;
+            secs = secs + 5*60;
             t = t + r.nextInt(5) - 2;
         }
     }

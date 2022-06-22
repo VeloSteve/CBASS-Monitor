@@ -2,11 +2,6 @@ package info.pml.cbass_monitor;
 
 import android.content.ServiceConnection;
 import android.os.Bundle;
-import android.text.Editable;
-import android.text.Spannable;
-import android.text.SpannableStringBuilder;
-import android.text.method.ScrollingMovementMethod;
-import android.text.style.ForegroundColorSpan;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.Menu;
@@ -14,14 +9,11 @@ import android.view.MenuInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
-import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.lifecycle.Lifecycle;
 
 import java.util.Timer;
 import java.util.TimerTask;
@@ -32,14 +24,11 @@ public class MonitorFragment extends BLEFragment implements ServiceConnection {
 
     //private enum Connected { False, Pending, True }
     private final String TAG = "MonitorFragment";
-    private String deviceAddress;
-    //private Menu menu;
 
-    //private TextView receiveText;
     private final byte nTemps = 4;
 
-    private TextView[] mon_temp = new TextView[nTemps];
-    private TextView[] mon_setpoint = new TextView[nTemps];
+    private final TextView[] mon_temp = new TextView[nTemps];
+    private final TextView[] mon_setpoint = new TextView[nTemps];
     private TextView cbass_time;
 
     // Copies of the incoming strings for use on restart.
@@ -47,10 +36,6 @@ public class MonitorFragment extends BLEFragment implements ServiceConnection {
 
 
     private Button updateButton, repeatButton;
-    //private Connected connected = Connected.False;
-    private boolean initialStart = true;
-    private boolean pendingNewline = false;
-    private String newline = TextUtil.newline_crlf;
 
     private boolean expectSeries = false;
     // Don't update forever - it slows the temperature checks a bit.
@@ -65,10 +50,6 @@ public class MonitorFragment extends BLEFragment implements ServiceConnection {
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setHasOptionsMenu(true);
-        // not recommended - interferes with lifecycle calls.  Especially onCreate and onDestroy
-        // are skipped.   setRetainInstance(true);
-        deviceAddress = getArguments().getString("device");
     }
 
     @Override
@@ -99,9 +80,6 @@ public class MonitorFragment extends BLEFragment implements ServiceConnection {
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_monitor, container, false);
-        //receiveText = view.findViewById(R.id.receive_text);                          // TextView performance decreases with number of spans
-        //receiveText.setTextColor(getResources().getColor(R.color.colorReceiveText)); // set as default color to reduce number of spans
-        //receiveText.setMovementMethod(ScrollingMovementMethod.getInstance());
 
         cbass_time = view.findViewById(R.id.cbass_time);
         mon_temp[0] = view.findViewById((R.id.mon_temp1));
@@ -183,19 +161,11 @@ public class MonitorFragment extends BLEFragment implements ServiceConnection {
     // which is in turn based on the last command sent.
     void receive(byte[] data) {
         String msg = new String(data);
+        String newline = TextUtil.newline_crlf;
         if(newline.equals(TextUtil.newline_crlf) && msg.length() > 0) {
             // don't show CR as ^M if directly before LF
             msg = msg.replace(TextUtil.newline_crlf, TextUtil.newline_lf);
-            // special handling if CR and LF come in separate fragments
-            // We don't have this view now.  Is the containing "if" even needed?
-            /*
-            if (pendingNewline && msg.charAt(0) == '\n') {
-                Editable edt = receiveText.getEditableText();
-                if (edt != null && edt.length() > 1)
-                    edt.replace(edt.length() - 2, edt.length(), "");
-            }
-             */
-            pendingNewline = msg.charAt(msg.length() - 1) == '\r';
+            boolean pendingNewline = msg.charAt(msg.length() - 1) == '\r';
         }
         // Get rid of the timer after some number of updates, rather than running forever.
         if (expectSeries && updatesLeft < 1) {
@@ -206,7 +176,7 @@ public class MonitorFragment extends BLEFragment implements ServiceConnection {
         if (expectBLE == ExpectBLEData.TimeOfDay) {
             parts = msg.split(" ");
             if (parts.length != 2) {
-                Toast.makeText(getActivity(), "bad response - didn't get a date time in message: " + msg, Toast.LENGTH_LONG).show();
+                Toast.makeText(getActivity(), "bad response - didn't get a date and time in message: " + msg, Toast.LENGTH_LONG).show();
                 if (expectSeries) {
                     Toast.makeText(getActivity(), "Canceling updates.  Try again.", Toast.LENGTH_LONG).show();
                 }
@@ -221,8 +191,6 @@ public class MonitorFragment extends BLEFragment implements ServiceConnection {
             parts = msg.split(",");
             if (parts.length != 4) {
                 Toast.makeText(getActivity(), "Please try again.", Toast.LENGTH_LONG).show();
-                //Toast.makeText(getActivity(), "bad response - didn't get 4 temperatures. Got " + parts.length, Toast.LENGTH_LONG).show();
-                //Toast.makeText(getActivity(), "MSG: " + msg, Toast.LENGTH_LONG).show();
                 expectBLE = ExpectBLEData.Nothing;
                 toggleButtons();
                 return;
@@ -255,13 +223,6 @@ public class MonitorFragment extends BLEFragment implements ServiceConnection {
         // expectBLE is the class variable.  Only modify it in "canSend" mode.
         // Also refer to the global value if sending, but if just updating the screen use the temp value.
         ExpectBLEData localExpect = canSend ? expectBLE : tempExpect;
-        /*
-        if (canSend) {
-            localExpect = expectBLE;  // use the global,  provided value is typically null
-        } else {
-            localExpect = tempExpect; // use the provided value
-        }
-         */
         if (localExpect == ExpectBLEData.TimeOfDay) {
             cbass_time.setText(parts[1]);  // part 0 is yyyy/mm/dd.  part 1 is hh:mm:ss
             if (canSend) {
@@ -303,7 +264,6 @@ public class MonitorFragment extends BLEFragment implements ServiceConnection {
     @Override
     void updateButtons(boolean isConnected) {
         super.updateButtons(isConnected);
-        Log.d("BLEFrag", "updateButtons in Monitor");
         if (updateButton == null || repeatButton == null) return;
         // Without the UI thread this causes a crash!  Something about looper threads...
         requireActivity().runOnUiThread(new Runnable() {

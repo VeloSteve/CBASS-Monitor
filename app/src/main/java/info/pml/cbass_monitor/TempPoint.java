@@ -53,7 +53,7 @@ public class TempPoint implements Comparable<TempPoint>, Parcelable {
     /**
      * The typical constructor.
      * @param buf a string buffer with one line of Arduino output,
-     * which contains days, minutes, and 8 temperatures, all comma-separated.
+     * which contains seconds since 2000 and 8 temperatures, all comma-separated.
      */
     public TempPoint(String buf) {
         String [] parts = buf.split(",");
@@ -88,17 +88,6 @@ public class TempPoint implements Comparable<TempPoint>, Parcelable {
         target[3] = t3;
         //setTimeZone();
     }
-
-    /*  Not used
-    public TempPoint(long s, float[] meas, float[] targ) {
-        seconds2k = s;
-        for (byte i=0; i<nTemps; i++) {
-            measured[i] = meas[i];
-            target[i] = targ[i];
-        }
-        //setTimeZone();
-    }
-     */
 
     public TempPoint(Parcel in) {
         seconds2k = in.readLong();
@@ -150,10 +139,6 @@ public class TempPoint implements Comparable<TempPoint>, Parcelable {
 
     public long seconds2000() {
         return seconds2k;
-    }
-
-    public long seconds70() {
-        return seconds2k + SECONDS_FROM_1970_TO_2000 - msOffset/1000;
     }
 
     public long msec70() {

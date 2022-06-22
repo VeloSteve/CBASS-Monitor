@@ -92,7 +92,7 @@ public class TemperatureData extends ArrayList<TempPoint> {
         Iterator<TempPoint> it = this.iterator();
         TempPoint tp;
         while (it.hasNext()) {
-            tp = (TempPoint)it.next();
+            tp = it.next();
             if(tp.seconds2000() < cutoff) {
                 Log.d(TAG, "Removing point with time " + tp.seconds2000() + " with cutoff " + cutoff);
                 it.remove();

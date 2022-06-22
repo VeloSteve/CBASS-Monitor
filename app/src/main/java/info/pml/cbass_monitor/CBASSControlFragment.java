@@ -3,11 +3,11 @@ package info.pml.cbass_monitor;
 import static androidx.constraintlayout.widget.ConstraintSet.INVISIBLE;
 import static java.lang.Integer.parseInt;
 
-import static info.pml.cbass_monitor.BLEFragment.ExpectBLEData.Ack;
-import static info.pml.cbass_monitor.BLEFragment.ExpectBLEData.TimeOfDay;
 
+import android.app.AlertDialog;
 import android.app.TimePickerDialog;
 import android.content.ComponentName;
+import android.content.DialogInterface;
 import android.content.ServiceConnection;
 import android.content.SharedPreferences;
 import android.os.Bundle;
@@ -38,11 +38,11 @@ public class CBASSControlFragment extends BLEFragment implements ServiceConnecti
     private Menu menu;
 
     SharedPreferences sp;
-    private EditText startTime;
+//    private EditText startTime;
     private TextView cbass_reply;
     private Button chooseTime;
-    private Button sendTime;
-    private android.widget.LinearLayout buttonPair;
+    //private Button sendTime;
+    //private android.widget.LinearLayout buttonPair;
     private TextView relativeText;
     private TextView relativeDisabled;
     private TimePickerDialog tpd;
@@ -54,16 +54,13 @@ public class CBASSControlFragment extends BLEFragment implements ServiceConnecti
     // Arduino DateTime likes two arguments in text form, so create them with
     // a separating comma for simple use on that side.
     SimpleDateFormat sdf = new SimpleDateFormat("MMM d yyyy,HH:mm:ss");
-    /*
+   /*
      * Lifecycle
      */
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         Log.d(TAG, "in onCreate");
-        setHasOptionsMenu(true);
-        setRetainInstance(true);
-        deviceAddress = getArguments().getString("device");
     }
 
 
@@ -87,10 +84,10 @@ public class CBASSControlFragment extends BLEFragment implements ServiceConnecti
         //receiveText.setTextColor(getResources().getColor(R.color.colorReceiveText)); // set as default color to reduce number of spans
         //receiveText.setMovementMethod(ScrollingMovementMethod.getInstance());
 
-        startTime = view.findViewById(R.id.cbass_time);
-        sendTime = view.findViewById(R.id.send_time_btn);
+        //startTime = view.findViewById(R.id.cbass_time);
+        //sendTime = view.findViewById(R.id.send_time_btn);
         cbass_reply = view.findViewById(R.id.cbass_reply);
-        buttonPair = view.findViewById(R.id.start_buttons);
+        //buttonPair = view.findViewById(R.id.start_buttons);
         relativeText = view.findViewById(R.id.ramp_text);
         relativeDisabled = view.findViewById(R.id.relative_disabled);
 
@@ -117,6 +114,7 @@ public class CBASSControlFragment extends BLEFragment implements ServiceConnecti
             }
         });
 
+        /*
         sendTime.setOnClickListener(    // OLD: v -> send("t"));
                 new View.OnClickListener() {
                     @Override
@@ -126,6 +124,7 @@ public class CBASSControlFragment extends BLEFragment implements ServiceConnecti
                         send("S," + pin + "," + startInMinutes, ExpectBLEData.Ack);
                     }
                 });
+         */
 
         // Start time picker, but note that it can't show the current time on
         // CBASS until after there's a connection, which is after this.
@@ -139,8 +138,30 @@ public class CBASSControlFragment extends BLEFragment implements ServiceConnecti
                                 @Override
                                 public void onTimeSet(TimePicker view, int hourOfDay, int minute) {
                                     startInMinutes = hourOfDay * 60 + minute;
-                                    sendTime.setEnabled(true);
+                                    //sendTime.setEnabled(true);
                                     // TODO show in UI.
+                                    // Oddly, with the time dialog can be created directly, the AlertDialog
+                                    // requires a builder.
+                                    AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
+                                    builder.setTitle("Send change to CBASS")
+                                            .setCancelable(true);
+
+                                    builder.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
+                                        @Override
+                                        public void onClick(DialogInterface dialog, int which) {
+                                            dialog.dismiss();
+                                        }
+                                    });
+
+                                    builder.setPositiveButton("Send to CBASS", new DialogInterface.OnClickListener() {
+                                        @Override
+                                        public void onClick(DialogInterface dialog, int which) {
+                                            String pin = sp.getString("connect_PIN", "OFF");
+                                            Log.d(TAG, "Sending new ramp time " + startInMinutes);
+                                            send("S," + pin + "," + startInMinutes, ExpectBLEData.Ack);
+                                        }
+                                    });
+                                    builder.create().show();
                                 }
                             },
 
@@ -204,13 +225,13 @@ public class CBASSControlFragment extends BLEFragment implements ServiceConnecti
                 if (msg.equals("NA")) {
                     startInMinutes = -1;
                     if (tpd != null && tpd.isShowing()) tpd.hide();
-                    buttonPair.setVisibility(View.GONE);
+                    //startTime.setVisibility(View.GONE);
                     relativeText.setVisibility(View.GONE);
                     relativeDisabled.setVisibility(View.VISIBLE);
                 } else {
                     startInMinutes = parseInt(msg);
                     tpd.updateTime(startInMinutes / 60, startInMinutes % 60);
-                    buttonPair.setVisibility(View.VISIBLE);
+                    //startTime.setVisibility(View.VISIBLE);
                     relativeText.setVisibility(View.VISIBLE);
                     relativeDisabled.setVisibility(View.GONE);
                 }
@@ -262,7 +283,7 @@ public class CBASSControlFragment extends BLEFragment implements ServiceConnecti
     void updateStatusRows() {
         // XXX HERE: be sure not to send one message while another is pending!
         Log.d(TAG, "Updating status area for CBASS time.");
-        send("t,1", TimeOfDay);
+        send("t,1", ExpectBLEData.TimeOfDay);
 
         localTime.setText(sdf.format(new Date()));
 
