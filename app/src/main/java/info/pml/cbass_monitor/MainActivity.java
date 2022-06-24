@@ -6,6 +6,7 @@ import android.util.Log;
 import androidx.fragment.app.FragmentManager;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
+import androidx.preference.PreferenceManager;
 
 
 public class MainActivity extends AppCompatActivity implements FragmentManager.OnBackStackChangedListener {
@@ -18,6 +19,11 @@ public class MainActivity extends AppCompatActivity implements FragmentManager.O
         setContentView(R.layout.activity_main);
         toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
+
+        // Apply default preferences from the xml file the first time the app is run.
+        // Without this, they only apply AFTER the settings screen has been used.
+        PreferenceManager.setDefaultValues(this, R.xml.root_preferences, false);
+
         getSupportFragmentManager().addOnBackStackChangedListener(this);
         if (savedInstanceState == null)
             getSupportFragmentManager().beginTransaction().add(R.id.fragment, new info.pml.cbass_monitor.DevicesFragment(), "DevicesFragment").addToBackStack("DevicesFragment").commit();

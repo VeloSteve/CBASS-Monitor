@@ -126,19 +126,16 @@ public class DevicesFragment extends ListFragment {
         setHasOptionsMenu(true);
         if(getActivity().getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH))
             bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+        // Used in listAdapter.getView()
+        SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(getContext());
+
         listAdapter = new ArrayAdapter<BluetoothDevice>(getActivity(), 0, listItems) {
             @SuppressLint("MissingPermission")
             @NonNull
             @Override
             public View getView(int position, View convertView, @NonNull ViewGroup parent) {
                 BluetoothDevice device = listItems.get(position);
-                /*
-                This was working, but not perfectly, when the incoming variable was view.
-                if (view == null) {
-                    Log.d(TAG, "getView supplies view, was null");
-                    view = getActivity().getLayoutInflater().inflate(R.layout.device_list_item, parent, false);
-                }
-                 */
+
                 // Try ignoring convertView and just making a fresh View every time.  Docs don't explain the difference.
                 View view = getActivity().getLayoutInflater().inflate(R.layout.device_list_item, parent, false);
 
@@ -150,7 +147,7 @@ public class DevicesFragment extends ListFragment {
                 //}
 
                 // Preferences determine whether to show non-CBASS devices.
-                SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(getContext());
+                //SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(getContext());
                 String style = sp.getString("device_style", "named");
                 TextView text1 = view.findViewById(R.id.text1);
                 TextView text2 = view.findViewById(R.id.text2);

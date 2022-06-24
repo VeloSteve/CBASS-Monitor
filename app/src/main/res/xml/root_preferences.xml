@@ -1,5 +1,7 @@
 <PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
-
+<!-- Warning: the defaults define here are NOT available at app startup unless
+     explicitly set by using setDefaultValues().  Otherwise they only get applied
+     when the preferences screen is opened! -->
     <PreferenceCategory app:title="@string/connect_prefs">
 
         <ListPreference
