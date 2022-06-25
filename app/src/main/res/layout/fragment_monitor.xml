@@ -33,25 +33,25 @@
         </TableRow>
 
         <TableRow
-            android:id="@+id/temps_row1"
+            android:id="@+id/col_headers"
             android:layout_width="match_parent"
             android:layout_height="match_parent">
 
             <TextView
-                android:id="@+id/tank0"
+                android:id="@+id/blank0"
                 android:layout_margin="10dp"
                 android:text=""
                  />
 
             <TextView
-                android:id="@+id/currLabel"
+                android:id="@+id/curr_label"
                 android:layout_margin="10dp"
                 android:text="Actual"
                 android:textAlignment="textEnd"
                 android:textAppearance="@style/TextAppearance.AppCompat.Display1" />
 
             <TextView
-                android:id="@+id/tank0"
+                android:id="@+id/targ_label"
                 android:layout_margin="10dp"
                 android:text="Target"
                 android:textAlignment="textEnd"
@@ -126,6 +126,7 @@
         </TableRow>
 
         <TableRow
+            android:id="@+id/temps_row3"
             android:layout_width="match_parent"
             android:layout_height="match_parent">
 
@@ -158,6 +159,7 @@
         </TableRow>
 
         <TableRow
+            android:id="@+id/temps_row4"
             android:layout_width="match_parent"
             android:layout_height="match_parent">
 
