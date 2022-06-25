@@ -1,7 +1,16 @@
 # Gradle files
+<<<<<<< HEAD
 app/build.gradle
+app\build.gradle
+=======
+>>>>>>> parent of c96d956 (Trying to not upload)
 .gradle/
 build/
+
+# editor temporaries
+*~
+*.swp
+*.swo
 
 # Local configuration file (sdk path, etc)
 local.properties
