@@ -436,12 +436,17 @@ public class GraphFragment extends BLEFragment implements ServiceConnection {
         // Check some basic requirements.
         Log.d("PARSE", "Full input: " + buf);
         if (!buf.startsWith("T")) {
-            throw new InputMismatchException("Batch must start with a T.");
+            Log.w(TAG, "Batch must start with a T.");
+            return 0;
+            //throw new InputMismatchException("Batch must start with a T.");
         } else if (buf.length() < lineLen) {
-            throw new InputMismatchException("Not enough data in buffer for a graph point. >" + buf + "<");
-        }
-        if (!buf.endsWith("BatchDone")) {
-            throw new InputMismatchException("Batch must end with BatchDone.");
+            Log.w(TAG, "Not enough data in buffer for a graph point. >" + buf + "<");
+            return 0;
+            //throw new InputMismatchException("Not enough data in buffer for a graph point. >" + buf + "<");
+        } else if (!buf.endsWith("BatchDone")) {
+            Log.w(TAG, "Batch must end with BatchDone.");
+            return 0;
+            //throw new InputMismatchException("Batch must end with BatchDone.");
         }
         // Remove the leading T and trailing BatchDone  There may also be an "AT+BLEUARTTX=".
         if (buf.indexOf("AT") > 0) {
@@ -483,7 +488,7 @@ public class GraphFragment extends BLEFragment implements ServiceConnection {
         // If points were deleted the next request should look forward in time.
         if (rem > 0) noMoreOldData = true;  // no need to set addToEnd, which is set at each new request.
 
-        Toast.makeText(getActivity(), savedData.size() + " points, " + count + " added, " + rem + " removed.", Toast.LENGTH_LONG).show();
+        Toast.makeText(getActivity(), savedData.size() + " points, " + count + " added, " + rem + " removed.", Toast.LENGTH_SHORT).show();
         Log.d(TAG, savedData.size() + " points, " + count + " added, " + rem + " removed.");
         return count;
     }

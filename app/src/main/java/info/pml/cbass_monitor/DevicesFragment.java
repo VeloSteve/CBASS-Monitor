@@ -20,7 +20,10 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+
 import androidx.annotation.NonNull;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 import androidx.fragment.app.ListFragment;
@@ -41,6 +44,7 @@ import android.widget.ListView;
 import android.widget.TextView;
 
 import java.util.ArrayList;
+import java.util.List;
 
 
 /**
@@ -49,7 +53,15 @@ import java.util.ArrayList;
 public class DevicesFragment extends ListFragment {
 
     private final String TAG = "DevicesFragment";
-    private enum ScanState { NONE, LE_SCAN, DISCOVERY, DISCOVERY_FINISHED }
+
+    private enum ScanState {NONE, LE_SCAN, DISCOVERY, DISCOVERY_FINISHED}
+
+    // Permissions
+    private final int MY_SCAN_CODE = 111;
+    private final int MY_LOC_CODE = 222;
+    private final int MY_CONN_CODE = 333;
+    private final int MY_MULTI_CODE = 999;
+
     private ScanState scanState = ScanState.NONE;
     private static final long LE_SCAN_PERIOD = 10000; // similar to bluetoothAdapter.startDiscovery
     private int cbassCount = 0; // So we can put non-CBASS named items before unnamed items.
@@ -68,21 +80,23 @@ public class DevicesFragment extends ListFragment {
 
     public DevicesFragment() {
         leScanCallback = (device, rssi, scanRecord) -> {
-            if(device != null && getActivity() != null) {
-                getActivity().runOnUiThread(() -> { updateScan(device); });
+            if (device != null && getActivity() != null) {
+                getActivity().runOnUiThread(() -> {
+                    updateScan(device);
+                });
             }
         };
         discoveryBroadcastReceiver = new BroadcastReceiver() {
             @SuppressLint("MissingPermission")
             @Override
             public void onReceive(Context context, Intent intent) {
-                if(BluetoothDevice.ACTION_FOUND.equals(intent.getAction())) {
+                if (BluetoothDevice.ACTION_FOUND.equals(intent.getAction())) {
                     BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-                    if(device.getType() != BluetoothDevice.DEVICE_TYPE_CLASSIC && getActivity() != null) {
+                    if (device.getType() != BluetoothDevice.DEVICE_TYPE_CLASSIC && getActivity() != null) {
                         getActivity().runOnUiThread(() -> updateScan(device));
                     }
                 }
-                if(BluetoothAdapter.ACTION_DISCOVERY_FINISHED.equals(intent.getAction())) {
+                if (BluetoothAdapter.ACTION_DISCOVERY_FINISHED.equals(intent.getAction())) {
                     scanState = ScanState.DISCOVERY_FINISHED; // don't cancel again
                     stopScan();
                 }
@@ -100,17 +114,17 @@ public class DevicesFragment extends ListFragment {
      */
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-        View view = super.onCreateView(inflater,container,savedInstanceState);
+        View view = super.onCreateView(inflater, container, savedInstanceState);
 
         View ev = inflater.inflate(R.layout.custom_empty_view, container, false);
         iconView = ev.findViewById(R.id.mpty);
         //FrameLayout existing= (FrameLayout)view;
-        FrameLayout innerFrame = (FrameLayout)(((FrameLayout)view).getChildAt(1));
+        FrameLayout innerFrame = (FrameLayout) (((FrameLayout) view).getChildAt(1));
 
 
         // Aargh.  Can't add to vg until it's removed from the useless but required container it comes in.
-        ((LinearLayout)iconView.getParent()).removeView(iconView);
-        innerFrame.addView(iconView );
+        ((LinearLayout) iconView.getParent()).removeView(iconView);
+        innerFrame.addView(iconView);
 
         return view;
     }
@@ -124,7 +138,7 @@ public class DevicesFragment extends ListFragment {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setHasOptionsMenu(true);
-        if(getActivity().getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH))
+        if (getActivity().getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH))
             bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
         // Used in listAdapter.getView()
         SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(getContext());
@@ -152,7 +166,7 @@ public class DevicesFragment extends ListFragment {
                 TextView text1 = view.findViewById(R.id.text1);
                 TextView text2 = view.findViewById(R.id.text2);
                 String dn = device.getName(); // Not used, but make obvious for debugging.
-                if(device.getName() == null || device.getName().isEmpty()) {
+                if (device.getName() == null || device.getName().isEmpty()) {
                     // Always hide unnamed devices.
                     //text1.setText("<unnamed>");
                     //text1.setText("");
@@ -161,7 +175,7 @@ public class DevicesFragment extends ListFragment {
                     Log.d(TAG, "hide nameless at " + position);
                     text1.setVisibility(GONE);
                     text2.setVisibility(GONE);
-               } else if (style.equals("CBASS") && !device.getName().contains("CBASS")) {
+                } else if (style.equals("CBASS") && !device.getName().contains("CBASS")) {
                     // If we require CBASS in the name, hide anything else.
                     Log.d(TAG, "hide NON");
                     text1.setVisibility(GONE);
@@ -197,7 +211,7 @@ public class DevicesFragment extends ListFragment {
         if (bluetoothAdapter == null) {
             menu.findItem(R.id.bt_settings).setEnabled(false);
             menu.findItem(R.id.ble_scan).setEnabled(false);
-        } else if(!bluetoothAdapter.isEnabled()) {
+        } else if (!bluetoothAdapter.isEnabled()) {
             menu.findItem(R.id.ble_scan).setEnabled(false);
         }
     }
@@ -207,9 +221,9 @@ public class DevicesFragment extends ListFragment {
         super.onResume();
         Log.d(TAG, "registering receiver");
         getActivity().registerReceiver(discoveryBroadcastReceiver, discoveryIntentFilter);
-        if(bluetoothAdapter == null) {
+        if (bluetoothAdapter == null) {
             setMyEmptyText("<bluetooth LE not supported>");
-        } else if(!bluetoothAdapter.isEnabled()) {
+        } else if (!bluetoothAdapter.isEnabled()) {
             setMyEmptyText("<bluetooth is disabled>");
             if (menu != null) {
                 listItems.clear();
@@ -263,29 +277,33 @@ public class DevicesFragment extends ListFragment {
 
     @SuppressLint("StaticFieldLeak") // AsyncTask needs reference to this fragment
     private void startScan() {
-        if(scanState != ScanState.NONE)
+        if (scanState != ScanState.NONE)
             return;
         scanState = ScanState.LE_SCAN;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (getActivity().checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+
+        // fine location is declared unnecessary, but Android 11 and lower allegedly don't know about that.
+        // Testing with Samsung at P, Pixel 3 at S.
+        // Without this, Samsung gives: java.lang.SecurityException: Need ACCESS_COARSE_LOCATION or ACCESS_FINE_LOCATION permission to get scan results
+        if ((Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) && (Build.VERSION.SDK_INT <= Build.VERSION_CODES.R)) {
+            if (ActivityCompat.checkSelfPermission(getActivity(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
                 scanState = ScanState.NONE;
-                AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
-                builder.setTitle(R.string.location_permission_title);
-                builder.setMessage(R.string.location_permission_message);
-                builder.setPositiveButton(android.R.string.ok,
-                        (dialog, which) -> requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 0));
-                builder.show();
+                ActivityCompat.requestPermissions(getActivity(), new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, MY_LOC_CODE);
                 return;
             }
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            // TODO: does the LocationManager code belong inside the Build if above or outside so every version gets it?
             LocationManager locationManager = (LocationManager) getActivity().getSystemService(Context.LOCATION_SERVICE);
-            boolean         locationEnabled = false;
+            boolean locationEnabled = false;
             try {
                 locationEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER);
-            } catch(Exception ignored) {}
+            } catch (Exception ignored) {
+            }
             try {
                 locationEnabled |= locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
-            } catch(Exception ignored) {}
-            if(!locationEnabled)
+            } catch (Exception ignored) {
+            }
+            if (!locationEnabled)
                 scanState = ScanState.DISCOVERY;
             // Starting with Android 6.0 a bluetooth scan requires ACCESS_COARSE_LOCATION permission, but that's not all!
             // LESCAN also needs enabled 'location services', whereas DISCOVERY works without.
@@ -294,15 +312,38 @@ public class DevicesFragment extends ListFragment {
             // we fall back to the older API that scans for bluetooth classic _and_ LE
             // sometimes the older API returns less results or slower
         }
+
+
+        // SCAN and CONNECT are required for Android 12 and above.
+        // See if we can request either of both, depending on what is needed.
+        // Oddly, my Pixel 3 (Android 12/S/API 31) asks of nearby devices permission automatically and not those below!
+        // Reinstalled to revoke permissions and it did ask to "connect and scan" warning about relative position.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            List<String> listPermissionsNeeded = new ArrayList<>();
+            if (ActivityCompat.checkSelfPermission(getActivity(), Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                listPermissionsNeeded.add(Manifest.permission.BLUETOOTH_CONNECT);
+            }
+            if (ActivityCompat.checkSelfPermission(getActivity(), Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
+                listPermissionsNeeded.add(Manifest.permission.BLUETOOTH_SCAN);
+            }
+
+            if (!listPermissionsNeeded.isEmpty()) {
+                scanState = ScanState.NONE;
+                ActivityCompat.requestPermissions(getActivity(), listPermissionsNeeded.toArray(new String[listPermissionsNeeded.size()]), MY_MULTI_CODE);
+                return;  // So there is a chance for permissions to be granted before moving on.
+            }
+        }
+
         cbassCount = 0;
         listItems.clear();
         listAdapter.notifyDataSetChanged();
         setMyEmptyText("<scanning...>");
         menu.findItem(R.id.ble_scan).setVisible(false);
         menu.findItem(R.id.ble_scan_stop).setVisible(true);
-        if(scanState == ScanState.LE_SCAN) {
+        if (scanState == ScanState.LE_SCAN) {
             leScanStopHandler.postDelayed(this::stopScan, LE_SCAN_PERIOD);
             new AsyncTask<Void, Void, Void>() {
+                @SuppressLint("MissingPermission")
                 @Override
                 protected Void doInBackground(Void[] params) {
                     bluetoothAdapter.startLeScan(null, leScanCallback);
@@ -318,27 +359,39 @@ public class DevicesFragment extends ListFragment {
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         // ignore requestCode as there is only one in this fragment
         if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-            new Handler(Looper.getMainLooper()).postDelayed(this::startScan,1); // run after onResume to avoid wrong empty-text
+            new Handler(Looper.getMainLooper()).postDelayed(this::startScan, 1); // run after onResume to avoid wrong empty-text
         } else {
             AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
-            builder.setTitle(getText(R.string.location_denied_title));
-            builder.setMessage(getText(R.string.location_denied_message));
+            if (requestCode == MY_SCAN_CODE) {
+                builder.setTitle(getText(R.string.scan_denied_title));
+                builder.setMessage(getText(R.string.scan_denied_message));
+            } else if (requestCode == MY_LOC_CODE) {
+                builder.setTitle(getText(R.string.location_denied_title));
+                builder.setMessage(getText(R.string.location_denied_message));
+            } else if (requestCode == MY_CONN_CODE) {
+                builder.setTitle(getText(R.string.connect_denied_title));
+                builder.setMessage(getText(R.string.connect_denied_message));
+            } else {
+                builder.setTitle("Other permission denied.");
+                builder.setMessage("Permission, possibly " + permissions[0] + " denied.  Can not scan.");
+            }
             builder.setPositiveButton(android.R.string.ok, null);
             builder.show();
         }
     }
 
     private void updateScan(BluetoothDevice device) {
-        if(scanState == ScanState.NONE) return;
-        if(!listItems.contains(device)) {
+        if (scanState == ScanState.NONE) return;
+        if (!listItems.contains(device)) {
             Log.d("DEVICES", "got one ");
             iconView.setVisibility(GONE);
             // Look at the device names (and UUIDs?) to put CBASS at the top.
             // There seem to be multiple calls per device, so it's best to add non-CBASS
             // devices rather than omit them completely.
-            // The original example code had a sort, but it doesn't seem important, and it
-            // would make it harder to keep CBASS at the top.
-            if (device.getName() != null && device.getName().contains("CBASS")) {
+
+            @SuppressLint("MissingPermission") String dn = device.getName();
+
+            if (dn != null && dn.contains("CBASS")) {
                 Log.d("DEVICES", "Adding CBASS");
                 cbassCount++;
                 listItems.add(0, device);
@@ -348,7 +401,7 @@ public class DevicesFragment extends ListFragment {
                 // the system keeps trying to add them for a while, possibly prolonging
                 // the scan.  They can be filtered from view in listAdapter getView.
                 // Also try putting unnamed devices last.
-                if (device.getName() == null || device.getName().isEmpty()) {
+                if (dn == null || dn.isEmpty()) {
                     Log.d("DEVICES", "Adding unnamed");
                     listItems.add(device);  // Last
                 } else {

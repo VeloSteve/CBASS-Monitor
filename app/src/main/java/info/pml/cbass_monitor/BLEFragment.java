@@ -380,7 +380,6 @@ public class BLEFragment extends Fragment implements ServiceConnection, SerialLi
         }
         if(connected != Connected.True) {
             Log.e(TAG, "connected False in send.");
-            // problem when called by Timer thread? Toast.makeText(getActivity(), "not connected", Toast.LENGTH_SHORT).show();
             return;
         }
 
@@ -417,6 +416,8 @@ public class BLEFragment extends Fragment implements ServiceConnection, SerialLi
             service.write(data);
             Log.d(TAG, "Sent " + str);
         } catch (Exception e) {
+            Log.i(TAG, "No send.  Expecting nothing. Exception: " + e.toString());
+            expectBLE = ExpectBLEData.Nothing;
             onSerialIoError(e);
         }
     }
