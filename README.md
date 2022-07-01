@@ -5,6 +5,13 @@ Warning: this app is in a very rough state.  It is only public because I have a 
 
 This app will allow monitoring of temperature and schedule information during a CBASS run.  This is supported by the CBASS-R shield, or any system with Bluetooth Low Energy (BLE) capability.
 
+Requirements:
+- CBASS-R
+- Adafruit's Bluefruit LE SPI friend 
+- An Arduino Mega
+- An Arduino sketch from [CBASS-Arduino-Sketch](https://github.com/VeloSteve/CBASS-Arduino-Sketch/releases)
+- A full CBASS system if you want to do anything useful.
+
 Working features:
 - Select from one or more CBASS systems in range.
 - Monitor current temperatures in real time.
